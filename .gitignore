@@ -8,3 +8,14 @@ target/
 .DS_Store
 *.log
 hs_err_pid*.log
+
+# Pliki audio użytkownika - nie commitujemy do repo (mogą być duże + prawa autorskie).
+# Beatmapy JSON pozostają jawnie wersjonowane.
+songs/*.mp3
+songs/*.wav
+songs/*.aiff
+songs/*.flac
+songs/*.MP3
+songs/*.WAV
+songs/*.AIFF
+songs/*.FLAC
