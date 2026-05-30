@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.openguitar</groupId>
+    <artifactId>open-guitar</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>OpenGuitar</name>
+    <description>Guitar Hero clone - beatmap parser/generator module</description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <jackson.version>2.17.2</jackson.version>
+        <tarsosdsp.version>2.4.1</tarsosdsp.version>
+        <mp3spi.version>1.9.5.4</mp3spi.version>
+    </properties>
+
+    <dependencies>
+        <!--
+            TarsosDSP - biblioteka DSP w czystej Javie.
+            Wykorzystujemy ją do detekcji uderzeń (onset detection)
+            metodą Complex Domain (Bello et al. 2004) oraz do estymacji BPM.
+            Oficjalna biblioteka nie jest publikowana w Maven Central,
+            korzystamy więc z mirrora 'st-h' (kompletny single-jar 2.4.1).
+        -->
+        <dependency>
+            <groupId>com.github.st-h</groupId>
+            <artifactId>TarsosDSP</artifactId>
+            <version>${tarsosdsp.version}</version>
+        </dependency>
+
+        <!--
+            mp3spi + zależności - Service Provider Interface dla javax.sound,
+            dzięki któremu AudioSystem.getAudioInputStream() potrafi czytać MP3.
+            mp3spi -> jlayer (dekoder MP3) + tritonus-share (warstwa audio).
+        -->
+        <dependency>
+            <groupId>com.googlecode.soundlibs</groupId>
+            <artifactId>mp3spi</artifactId>
+            <version>${mp3spi.version}</version>
+        </dependency>
+
+        <!-- Jackson - serializacja/deserializacja JSON, natywne wsparcie dla Java records (>=2.12). -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <!-- SLF4J (proste logi konsolowe). -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>2.0.13</version>
+        </dependency>
+
+        <!-- Testy -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.3</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.3.1</version>
+            </plugin>
+            <!-- Plugin do wygodnego uruchomienia z linii poleceń: mvn exec:java -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.4.1</version>
+                <configuration>
+                    <mainClass>com.openguitar.beatmap.Main</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
