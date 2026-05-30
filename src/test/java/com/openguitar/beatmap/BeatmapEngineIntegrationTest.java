@@ -73,6 +73,30 @@ class BeatmapEngineIntegrationTest {
     }
 
     @Test
+    void shouldDetectOnsetsInStereo48kHzTrack() throws Exception {
+        // Symuluje plik MP3 po dekompresji: stereo, 48 kHz - dokładnie ścieżka kodu
+        // (decode + downmix do mono) którą napotyka realny MP3 przepuszczany
+        // przez mp3spi → AudioSystem.getAudioInputStream(targetFormat, ...).
+        Path wav = Files.createTempFile("stereo48-", ".wav");
+        Path json = Files.createTempFile("stereo-bm-", ".json");
+        try {
+            SyntheticAudio.writeStereoClickTrack(wav, 12, 500, 1000.0, 48000);
+
+            BeatmapEngine engine = new BeatmapEngine();
+            SongContext ctx = engine.generateAndSave(wav, json, "stereo48", "Stereo 48k");
+
+            assertTrue(ctx.notes().size() >= 8,
+                    "Stereo 48 kHz powinno generować onsety (regresja na konwersję PCM): "
+                            + ctx.notes().size());
+            assertTrue(ctx.bpm() >= 100 && ctx.bpm() <= 140,
+                    "BPM dla 120 BPM target: " + ctx.bpm());
+        } finally {
+            Files.deleteIfExists(wav);
+            Files.deleteIfExists(json);
+        }
+    }
+
+    @Test
     void shouldBeDeterministicForSameSongId() throws Exception {
         Path wav = Files.createTempFile("clicks3-", ".wav");
         try {

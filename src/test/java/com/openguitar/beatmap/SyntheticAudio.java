@@ -42,7 +42,36 @@ final class SyntheticAudio {
             int startSample = (int) ((long) SAMPLE_RATE * b * beatIntervalMs / 1000);
             mixClick(pcm, startSample, clickSamples, clickFreqHz, 0.9);
         }
-        return writePcm(output, pcm);
+        return writePcm(output, pcm, SAMPLE_RATE, 1);
+    }
+
+    /**
+     * Click-track w formacie stereo i niestandardowym sample rate. Symuluje plik audio
+     * po dekompresji MP3 (większość MP3 to stereo 44.1 lub 48 kHz). Pozwala
+     * przetestować ścieżkę "decode + downmix" w {@code BeatmapEngine.toTargetPcm}.
+     */
+    static Path writeStereoClickTrack(Path output, int beatCount, int beatIntervalMs,
+                                      double clickFreqHz, int sampleRate) throws IOException {
+        int totalMs = beatIntervalMs * beatCount + 500;
+        int totalFrames = (int) ((long) sampleRate * totalMs / 1000);
+        short[] interleaved = new short[totalFrames * 2]; // stereo: L,R,L,R,...
+
+        int clickFrames = sampleRate * 60 / 1000;
+
+        for (int b = 0; b < beatCount; b++) {
+            int startFrame = (int) ((long) sampleRate * b * beatIntervalMs / 1000);
+            for (int i = 0; i < clickFrames; i++) {
+                int frame = startFrame + i;
+                if (frame >= totalFrames) break;
+                double t = (double) i / sampleRate;
+                double envelope = Math.exp(-3.5 * i / clickFrames);
+                double sample = 0.85 * envelope * Math.sin(2.0 * Math.PI * clickFreqHz * t);
+                short s = (short) (sample * Short.MAX_VALUE);
+                interleaved[frame * 2]     = s; // L
+                interleaved[frame * 2 + 1] = s; // R
+            }
+        }
+        return writePcm(output, interleaved, sampleRate, 2);
     }
 
     /**
@@ -67,7 +96,7 @@ final class SyntheticAudio {
             int startSample = (int) ((long) SAMPLE_RATE * b * beatIntervalMs / 1000);
             mixClick(pcm, startSample, clickSamples, freq, 0.85);
         }
-        return writePcm(output, pcm);
+        return writePcm(output, pcm, SAMPLE_RATE, 1);
     }
 
     /**
@@ -91,23 +120,26 @@ final class SyntheticAudio {
         }
     }
 
-    /** Zapisuje bufor 16-bit mono do pliku WAV. */
-    private static Path writePcm(Path output, short[] pcm) throws IOException {
+    /** Zapisuje bufor 16-bit (mono lub stereo, zależnie od {@code channels}) do pliku WAV. */
+    private static Path writePcm(Path output, short[] pcm, int sampleRate, int channels)
+            throws IOException {
         byte[] bytes = new byte[pcm.length * BYTES_PER_SAMPLE];
         for (int i = 0; i < pcm.length; i++) {
             bytes[i * 2]     = (byte) (pcm[i] & 0xFF);          // LSB - little-endian
             bytes[i * 2 + 1] = (byte) ((pcm[i] >> 8) & 0xFF);   // MSB
         }
 
+        int frameSize = channels * BYTES_PER_SAMPLE;
         AudioFormat format = new AudioFormat(
                 AudioFormat.Encoding.PCM_SIGNED,
-                SAMPLE_RATE, BITS_PER_SAMPLE, 1,
-                BYTES_PER_SAMPLE, SAMPLE_RATE,
+                sampleRate, BITS_PER_SAMPLE, channels,
+                frameSize, sampleRate,
                 false // little-endian
         );
 
+        long frameLength = pcm.length / channels;
         try (AudioInputStream ais = new AudioInputStream(
-                new ByteArrayInputStream(bytes), format, pcm.length)) {
+                new ByteArrayInputStream(bytes), format, frameLength)) {
             AudioSystem.write(ais, AudioFileFormat.Type.WAVE, output.toFile());
         }
         return output;
