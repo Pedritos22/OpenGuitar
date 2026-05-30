@@ -1,7 +1,35 @@
-# OpenGuitar — moduł beatmapy
+# OpenGuitar
 
-Klon „Guitar Hero” na desktop (Java 21 + Maven). Repozytorium zawiera obecnie
-**tylko warstwę parsera/generatora beatmapy** z plików audio (WAV/MP3/AIFF).
+Klon „Guitar Hero” na desktop (Java 21 + Maven). Składa się z dwóch modułów:
+
+- **`com.openguitar.beatmap`** — parser/generator beatmapy z plików audio (WAV/MP3/AIFF) + serializacja JSON.
+- **`com.openguitar.game`** — frontend rozgrywki w JavaFX: 4 ścieżki, spadające nutki, hit detection, score.
+
+## Uruchomienie gry
+
+```bash
+# tryb demo (proceduralna mapa, bez audio - tylko zobaczyć wizualizację):
+mvn javafx:run
+
+# rzeczywista beatmapa (plik audio musi leżeć obok JSON-a, ścieżka z pola "audioPath"):
+mvn javafx:run -Djavafx.args="ścieżka/do/beatmap.json"
+```
+
+Sterowanie: **D / F / J / K** (po jednym klawiszu na ścieżkę), **ESC** kończy utwór wcześniej.
+
+Pełen workflow end-to-end (parser → JSON → gra):
+
+```bash
+# 1. Wygeneruj beatmapę z pliku audio
+mvn -q exec:java -Dexec.args="moja-piosenka.mp3 beatmap.json 'Tytuł'"
+
+# 2. Zagraj
+mvn javafx:run -Djavafx.args="beatmap.json"
+```
+
+---
+
+## Część 1: moduł beatmapy
 
 ## Architektura modułu
 
@@ -150,7 +178,7 @@ Procesor audio działający równolegle z onset detectorem:
 4. Onset handler odczytuje aktualny stan klasyfikatora w momencie wykrycia
    uderzenia → mapuje na `lane`.
 
-## Struktura pakietu
+## Struktura pakietu beatmapy
 
 ```
 src/main/java/com/openguitar/beatmap/
@@ -159,10 +187,62 @@ src/main/java/com/openguitar/beatmap/
     BeatmapEngine.java   — generator: audio → SongContext → JSON
     BeatmapLoader.java   — loader: JSON → SongContext
     Main.java            — CLI demo (round-trip + tryb --demo)
+```
 
-src/test/java/com/openguitar/beatmap/
-    SyntheticAudio.java                  — helper: generuje WAV programowo
-    BeatmapJsonRoundTripTest.java        — testy serializacji
-    BeatmapEngineIntegrationTest.java    — testy pełnego pipeline'u
-    FrequencyBandsStrategyTest.java      — testy klasyfikacji pasm
+---
+
+## Część 2: moduł gry (JavaFX frontend)
+
+### Wybór technologii
+
+**JavaFX** (nie Swing, nie libGDX). Główny powód: `MediaPlayer.getCurrentTime()`
+zwraca jednolicie czas odtwarzania w ms dla MP3 i WAV — co jest
+*conditio sine qua non* gry rytmicznej. W Swingu MP3 wymagałoby ręcznego liczenia
+czasu z `SourceDataLine` + mp3spi i ryzyka driftu. Dodatkowo `AnimationTimer`
+daje 60 Hz pętlę z nanosekundową precyzją, a `Canvas` jest sprzętowo
+akcelerowany przez Prism — żadnych problemów z flickeringiem.
+
+### Synchronizacja time → pozycja Y
+
+Pozycja każdej nuty jest **funkcją czystą czasu odtwarzania audio**:
+
+```
+y(note) = HIT_LINE_Y - (note.timeMs - currentAudioMs) * SPEED_PX_PER_MS
+```
+
+Gdy `currentAudioMs == note.timeMs` → nuta dokładnie na hit-line. Czas pobieramy
+z `MediaPlayer.getCurrentTime()`, **nie** z licznika klatek — dzięki temu nawet
+po pauzie/buforowaniu/GC nuty nie odpływają od muzyki. Gdy audio jest niedostępne
+(tryb demo bez pliku), używamy upływu czasu od `AnimationTimer` jako fallback.
+
+### Hit detection i scoring
+
+| Okno   | Judgment | Punkty (×1) |
+|--------|----------|-------------|
+| ±50 ms | PERFECT  | 300         |
+| ±100 ms| GREAT    | 150         |
+| > 100 ms (lub brak naciśnięcia) | MISS | 0 + reset combo |
+
+Mnożnik combo: `1 + min(combo / 10, 3)` — cap przy ×4 dla combo ≥ 30.
+
+Dla wciśniętego klawisza algorytm szuka **najbliższej czasowo** nieprzetworzonej
+nuty na danej ścieżce w oknie ±100 ms. Notki które przeleciały hit-line + 100 ms
+bez naciśnięcia są oznaczane jako MISS w pętli renderującej.
+
+### Sterowanie i UI
+
+- 4 ścieżki — kolory klasycznego GH (zielony / czerwony / żółty / niebieski)
+- klawisze: **D**, **F**, **J**, **K**
+- **ESC** — natychmiastowy koniec utworu i zbudowanie `GameResult`
+- HUD: aktualny score, mnożnik, combo, hits/misses, ostatnie judgmenty per ścieżka
+
+### Struktura pakietu game
+
+```
+src/main/java/com/openguitar/game/
+    GameApp.java         — JavaFX Application, ładuje beatmapę z CLI lub fallback demo
+    GameScreen.java      — Canvas + AnimationTimer + KeyHandler + render
+    ScoreState.java      — score, combo, multiplier (czysta logika, bez UI)
+    HitJudgment.java     — enum PERFECT/GREAT/MISS + okna czasowe
+    GameResult.java      — rekord zwracany po końcu utworu
 ```
