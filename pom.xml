@@ -21,6 +21,7 @@
         <jackson.version>2.17.2</jackson.version>
         <tarsosdsp.version>2.4.1</tarsosdsp.version>
         <mp3spi.version>1.9.5.4</mp3spi.version>
+        <javafx.version>21.0.4</javafx.version>
     </properties>
 
     <dependencies>
@@ -55,6 +56,23 @@
             <version>${jackson.version}</version>
         </dependency>
 
+        <!--
+            JavaFX - frontend gry.
+            javafx-controls    - sceny, kontrolki UI, wczytuje też javafx.graphics
+            javafx-media       - MediaPlayer (MP3/WAV) z dokładnym getCurrentTime() w ms,
+                                 niezbędny do sync notki↔audio.
+        -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-media</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+
         <!-- SLF4J (proste logi konsolowe). -->
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -83,13 +101,29 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.3.1</version>
             </plugin>
-            <!-- Plugin do wygodnego uruchomienia z linii poleceń: mvn exec:java -->
+            <!-- exec:java - dla CLI parsera audio (com.openguitar.beatmap.Main) -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.4.1</version>
                 <configuration>
                     <mainClass>com.openguitar.beatmap.Main</mainClass>
+                </configuration>
+            </plugin>
+
+            <!--
+                javafx:run uruchamia aplikację JavaFX z poprawnie ustawionym
+                module-path / add-modules, bez ręcznego żonglowania argumentami JVM.
+
+                    mvn javafx:run
+                    mvn javafx:run -Djavafx.args="path/to/beatmap.json"
+            -->
+            <plugin>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-maven-plugin</artifactId>
+                <version>0.0.8</version>
+                <configuration>
+                    <mainClass>com.openguitar.game.GameApp</mainClass>
                 </configuration>
             </plugin>
         </plugins>
