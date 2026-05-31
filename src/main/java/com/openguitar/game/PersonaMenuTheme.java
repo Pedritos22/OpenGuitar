@@ -198,4 +198,55 @@ public final class PersonaMenuTheme {
              + "-fx-border-color: transparent transparent transparent " + accentHex + ";"
              + "-fx-border-width: 0 0 0 3;";
     }
+
+    /** Panel nakładki ustawień (jak historia, ale z innym akcentem). */
+    public static String settingsPanel() {
+        return "-fx-background-color: linear-gradient(to bottom, #0a1d3a, #050b16);"
+             + "-fx-border-color: " + ACCENT + " " + BORDER + " " + BORDER + " " + BORDER_BRIGHT + ";"
+             + "-fx-border-width: 1 1 1 4;";
+    }
+
+    /** Wiersz ustawienia (etykieta + kontrolka). */
+    public static String settingRow() {
+        return "-fx-background-color: " + BG_ROW + ";"
+             + "-fx-border-color: transparent transparent transparent " + ACCENT + ";"
+             + "-fx-border-width: 0 0 0 3;"
+             + "-fx-padding: 10 14 10 14;";
+    }
+
+    /** Klawiszowy „cap” pokazujący przypisany przycisk ścieżki. */
+    public static String keyCap(boolean listening) {
+        String border = listening ? ACCENT_GLOW : BORDER_BRIGHT;
+        String bg = listening ? "rgba(125, 249, 255, 0.18)" : "rgba(0, 212, 255, 0.06)";
+        return "-fx-background-color: " + bg + ";"
+             + "-fx-text-fill: " + (listening ? ACCENT_GLOW : TEXT) + ";"
+             + "-fx-font-family: " + UI + ";"
+             + "-fx-font-size: 14px;"
+             + "-fx-font-weight: bold;"
+             + "-fx-padding: 0 12 0 12;"
+             + "-fx-background-radius: 0;"
+             + "-fx-border-color: " + border + ";"
+             + "-fx-border-width: " + (listening ? 2 : 1) + ";"
+             + "-fx-border-radius: 0;"
+             + "-fx-cursor: hand;";
+    }
+
+    /** Mały przycisk-stepper (np. +/- przy odliczaniu). */
+    public static String stepperButton() {
+        return rowButtonOutline(ACCENT_GLOW, BORDER);
+    }
+
+    /** Przycisk z ikoną zębatki (font systemowy, by glif na pewno się renderował). */
+    public static String gearButton() {
+        return "-fx-background-color: rgba(0, 212, 255, 0.06);"
+             + "-fx-text-fill: " + ACCENT_GLOW + ";"
+             + "-fx-font-family: 'System';"
+             + "-fx-font-size: 16px;"
+             + "-fx-padding: 0 10 0 10;"
+             + "-fx-background-radius: 0;"
+             + "-fx-border-color: " + BORDER + ";"
+             + "-fx-border-width: 1;"
+             + "-fx-border-radius: 0;"
+             + "-fx-cursor: hand;";
+    }
 }
