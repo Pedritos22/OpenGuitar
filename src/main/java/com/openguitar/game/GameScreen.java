@@ -223,6 +223,9 @@ public final class GameScreen {
     private final long countdownTotalNanos;
     private boolean countingDown = false;
     private long countdownStartNanos = -1;
+    /** Ostatnia wyświetlona cyfra odliczania (do jednorazowego SFX tick). */
+    private int lastCountdownDigit = -1;
+    private boolean countdownGoPlayed = false;
 
     // ---------- konstrukcja ----------
 
@@ -276,6 +279,7 @@ public final class GameScreen {
             try {
                 Media media = new Media(uri.toString());
                 player = new MediaPlayer(media);
+                player.setOnReady(() -> player.setVolume(SoundManager.songVolume()));
                 player.setOnEndOfMedia(this::finishIfNotYet);
                 player.setOnError(() -> LOG.log(Level.WARNING,
                         "MediaPlayer error: " + player.getError()));
@@ -305,12 +309,14 @@ public final class GameScreen {
 
     /** Rozpoczyna odliczanie startowe. Jeśli wyłączone — od razu rusza rozgrywka/audio. */
     private void beginCountdown() {
+        lastCountdownDigit = -1;
+        countdownGoPlayed = false;
         if (countdownTotalNanos <= 0) {
             startPlayback();
             return;
         }
         countingDown = true;
-        countdownStartNanos = -1; // ustawiane w pierwszym ticku
+        countdownStartNanos = -1;
     }
 
     /** Domknięcie odliczania: rusza audio (lub zegar ścienny) i wpuszcza gracza do gry. */
@@ -330,6 +336,7 @@ public final class GameScreen {
     /** Startuje/wznawia odtwarzanie audio (jeśli jest). */
     private void startPlayback() {
         if (player != null) {
+            player.setVolume(SoundManager.songVolume());
             player.play();
         }
     }
@@ -371,6 +378,7 @@ public final class GameScreen {
             if (countdownStartNanos < 0) {
                 countdownStartNanos = nowNanos;
             }
+            updateCountdownAudio(nowNanos);
             if (nowNanos - countdownStartNanos >= countdownTotalNanos) {
                 finishCountdown(nowNanos);
             } else {
@@ -395,8 +403,29 @@ public final class GameScreen {
         }
     }
 
+    /** Jednorazowe SFX odliczania (tick co sekundę + GO! na końcu). */
+    private void updateCountdownAudio(long nowNanos) {
+        long elapsed = (countdownStartNanos < 0) ? 0 : nowNanos - countdownStartNanos;
+        long numbersNanos = countdownTotalNanos - GO_FLASH_NANOS;
+
+        if (elapsed >= numbersNanos) {
+            if (!countdownGoPlayed) {
+                countdownGoPlayed = true;
+                SoundManager.get().play(SoundManager.Sfx.COUNTDOWN_GO);
+            }
+            return;
+        }
+
+        int secondIdx = (int) (elapsed / 1_000_000_000L);
+        int total = (int) (numbersNanos / 1_000_000_000L);
+        int digit = Math.max(1, total - secondIdx);
+        if (digit != lastCountdownDigit) {
+            lastCountdownDigit = digit;
+            SoundManager.get().play(SoundManager.Sfx.COUNTDOWN_TICK);
+        }
+    }
+
     /**
-     * Posuwa zegar gry o deltę zegara ściennego i delikatnie koryguje go do audio.
      * MediaPlayer.getCurrentTime() bywa gruboziarnisty (zwłaszcza dla WAV), więc
      * interpolujemy między jego próbkami zamiast czytać go wprost co klatkę.
      */
@@ -491,14 +520,21 @@ public final class GameScreen {
     private void handlePauseKey(KeyCode key) {
         switch (key) {
             case ESCAPE -> resumeGame();
-            case UP, LEFT -> pauseSelection = Math.floorMod(pauseSelection - 1, PAUSE_OPTIONS.length);
-            case DOWN, RIGHT -> pauseSelection = Math.floorMod(pauseSelection + 1, PAUSE_OPTIONS.length);
+            case UP, LEFT -> {
+                pauseSelection = Math.floorMod(pauseSelection - 1, PAUSE_OPTIONS.length);
+                SoundManager.get().play(SoundManager.Sfx.NAV);
+            }
+            case DOWN, RIGHT -> {
+                pauseSelection = Math.floorMod(pauseSelection + 1, PAUSE_OPTIONS.length);
+                SoundManager.get().play(SoundManager.Sfx.NAV);
+            }
             case ENTER, SPACE -> activatePauseOption();
             default -> { /* ignorujemy */ }
         }
     }
 
     private void activatePauseOption() {
+        SoundManager.get().play(SoundManager.Sfx.CONFIRM);
         if (pauseSelection == 0) {
             resumeGame();
         } else {
@@ -511,6 +547,7 @@ public final class GameScreen {
         paused = true;
         pauseSelection = 0;
         pauseStartNanos = System.nanoTime();
+        SoundManager.get().play(SoundManager.Sfx.PAUSE);
         if (player != null) {
             player.pause();
         }
@@ -520,13 +557,12 @@ public final class GameScreen {
         if (!paused) return;
         paused = false;
         if (countdownTotalNanos > 0) {
-            // Wznowienie również przez odliczanie — gracz ma czas złapać rytm.
-            // Audio zostaje wstrzymane do końca odliczania; finishCountdown wyrówna zegar.
+            // Wznowienie przez odliczanie — gracz ma czas złapać rytm.
             beginCountdown();
         } else {
+            SoundManager.get().play(SoundManager.Sfx.RESUME);
             startPlayback();
             if (player == null) {
-                // tryb bez audio: przesuwamy punkt startu o długość pauzy, by czas nie skoczył
                 loopStartNanos += System.nanoTime() - pauseStartNanos;
             }
             for (int i = 0; i < LANES; i++) {
@@ -540,6 +576,7 @@ public final class GameScreen {
         if (finished) return;
         finished = true;
         paused = false;
+        SoundManager.get().play(SoundManager.Sfx.BACK);
         stop();
         if (onQuit != null) {
             onQuit.run();
@@ -598,6 +635,13 @@ public final class GameScreen {
         score.register(judgment);
 
         spawnJudgmentPopup(lane, judgment);
+        SoundManager.Sfx sfx = switch (judgment) {
+            case PERFECT -> SoundManager.Sfx.PERFECT;
+            case GREAT -> SoundManager.Sfx.GREAT;
+            case MISS -> SoundManager.Sfx.MISS;
+        };
+        SoundManager.get().playGameplay(sfx);
+
         if (judgment == HitJudgment.MISS) {
             if (prevCombo >= 5) {
                 popups.add(FloatingPopup.comboBreak(popupCenterX(), popupCenterY()));
@@ -612,6 +656,7 @@ public final class GameScreen {
         }
         if (isComboMilestone(combo, prevCombo)) {
             popups.add(FloatingPopup.combo(combo, popupCenterX(), popupCenterY() - 18));
+            SoundManager.get().playGameplay(SoundManager.Sfx.COMBO);
         }
     }
 
@@ -619,6 +664,7 @@ public final class GameScreen {
         int prevCombo = score.combo();
         score.registerMiss();
         spawnJudgmentPopup(lane, HitJudgment.MISS);
+        SoundManager.get().playGameplay(SoundManager.Sfx.MISS);
         if (prevCombo >= 5) {
             popups.add(FloatingPopup.comboBreak(popupCenterX(), popupCenterY()));
         }
@@ -1366,6 +1412,7 @@ public final class GameScreen {
         LOG.info(() -> "GameResult: " + result);
         showingResults = true;
         resultsStartNanos = System.nanoTime();
+        SoundManager.get().playResultsMusic();
     }
 
     /** Domknięcie ekranu wyników: zwolnienie zasobów i powrót do menu (przez callback). */
@@ -1374,6 +1421,7 @@ public final class GameScreen {
             return;
         }
         showingResults = false;
+        SoundManager.get().play(SoundManager.Sfx.CONFIRM);
         stop();
         if (onFinished != null) {
             onFinished.accept(result);
