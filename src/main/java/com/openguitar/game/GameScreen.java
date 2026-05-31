@@ -21,8 +21,6 @@ import javafx.scene.paint.CycleMethod;
 import javafx.scene.paint.LinearGradient;
 import javafx.scene.paint.RadialGradient;
 import javafx.scene.paint.Stop;
-import javafx.scene.text.Font;
-import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 
 import java.net.URI;
@@ -85,10 +83,8 @@ public final class GameScreen {
     /** Prędkość zjazdu nut już po minięciu hit-line (px/ms). */
     private static final double PAST_HIT_SPEED_PX_PER_MS = 0.45;
 
-    /** Klawisze poszczególnych ścieżek (klasyczny układ "DFJK"). */
-    private static final KeyCode[] LANE_KEYS = {
-            KeyCode.D, KeyCode.F, KeyCode.J, KeyCode.K
-    };
+    /** Klawisze poszczególnych ścieżek pobrane z konfiguracji. */
+    private final KeyCode[] laneKeys;
 
     /** Czas po ostatniej nucie, po którym uznajemy utwór za skończony (ms). */
     private static final int END_GRACE_PERIOD_MS = 2_000;
@@ -111,48 +107,6 @@ public final class GameScreen {
 
     /** Opcje ekranu pauzy. */
     private static final String[] PAUSE_OPTIONS = {"WZNÓW", "WYJDŹ DO MENU"};
-    private static final Font RANK_STAMP_FONT = PersonaFonts.display(140);
-    private static final double RANK_STAMP_RING_RADIUS = 78;
-
-    // ---------- prekompute geometrii i kolorów (zero alokacji w pętli renderowania) ----------
-    // Krawędzie torów przy horyzoncie (głębokość 0) i przy hit-line (głębokość 1) są stałe.
-    private static final double[] LANE_TOP_L = new double[LANES];
-    private static final double[] LANE_TOP_R = new double[LANES];
-    private static final double[] LANE_HIT_L = new double[LANES];
-    private static final double[] LANE_HIT_R = new double[LANES];
-    /** Wypełnienia torów (bezczynny / wciśnięty) oraz obrys klawisza — cache per ścieżka. */
-    private static final Color[] LANE_FILL_IDLE = new Color[LANES];
-    private static final Color[] LANE_FILL_HELD = new Color[LANES];
-    private static final Color[] LANE_KEY_STROKE = new Color[LANES];
-    /** Poprzeczki perspektywy (6 stałych jasności). */
-    private static final Color[] CROSSBAR = new Color[6];
-
-    private static final Color SIDE_MASK    = PersonaPalette.alpha(PersonaPalette.BLACK, 0.45);
-    private static final Color DIAG_LINE    = PersonaPalette.alpha(PersonaPalette.AQUA, 0.05);
-    private static final Color LANE_LINE    = PersonaPalette.alpha(PersonaPalette.WHITE, 0.12);
-    private static final Color HORIZON_TRI  = PersonaPalette.alpha(PersonaPalette.AQUA, 0.12);
-    private static final Color FRAME_GLOW   = PersonaPalette.alpha(PersonaPalette.AQUA, 0.25);
-    private static final Color HITLINE_FILL = PersonaPalette.alpha(PersonaPalette.AQUA, 0.06);
-    private static final Color KEYPILL_BG   = PersonaPalette.alpha(PersonaPalette.BLACK, 0.6);
-
-    static {
-        double totalTop = LANES * TOP_LANE_WIDTH;
-        for (int lane = 0; lane < LANES; lane++) {
-            double topL = VANISH_CENTER_X - totalTop / 2.0 + lane * TOP_LANE_WIDTH;
-            LANE_TOP_L[lane] = topL;
-            LANE_TOP_R[lane] = topL + TOP_LANE_WIDTH;
-            LANE_HIT_L[lane] = SIDE_MARGIN + lane * LANE_WIDTH;
-            LANE_HIT_R[lane] = SIDE_MARGIN + (lane + 1) * LANE_WIDTH;
-
-            Color tint = PersonaPalette.lane(lane);
-            LANE_FILL_IDLE[lane] = PersonaPalette.alpha(tint, 0.05);
-            LANE_FILL_HELD[lane] = PersonaPalette.alpha(tint, 0.18);
-            LANE_KEY_STROKE[lane] = PersonaPalette.alpha(tint, 0.9);
-        }
-        for (int i = 1; i <= 6; i++) {
-            CROSSBAR[i - 1] = PersonaPalette.alpha(PersonaPalette.AQUA, 0.05 + 0.12 * (i / 7.0));
-        }
-    }
 
     // ---------- stan ----------
     private final SongContext context;
@@ -184,19 +138,6 @@ public final class GameScreen {
     /** Punkt startu w nanosekundach - fallback gdy audio nie jest załadowane. */
     private long loopStartNanos = -1;
 
-    // Gładki zegar: interpolujemy czas po ścianie zegara (nanoTime) między rzadkimi,
-    // skokowymi próbkami z MediaPlayer.getCurrentTime() i delikatnie korygujemy dryf.
-    // Dzięki temu na WAV (gdzie zegar mediów aktualizuje się grubo) nie ma juttera.
-    private long lastFrameNanos = -1;
-    private double lastRawAudioMs = -1;
-
-    // Bufor wyniku placementu nuty — unikamy alokacji rekordu na każdą nutę/klatkę.
-    private double npX;
-    private double npY;
-    private double npW;
-    private double npH;
-    private double npDepth;
-
     // Stan widoku HUD: ostatnio pokazane wartości + moment ich zmiany (efekt „pop”).
     // To wyłącznie pamięć podręczna renderera — nie wpływa na logikę punktacji.
     private int shownScore = -1;
@@ -211,14 +152,15 @@ public final class GameScreen {
     private boolean showingResults = false;
     private long resultsStartNanos = 0;
     private GameResult result;
-    private RankStampLayout rankStampLayout;
 
     // ---------- konstrukcja ----------
 
-    public GameScreen(SongContext context, Consumer<GameResult> onFinished, Runnable onQuit) {
+    public GameScreen(SongContext context, GameSettings settings, Consumer<GameResult> onFinished, Runnable onQuit) {
         this.context = context;
+        GameSettings effectiveSettings = settings != null ? settings : GameSettings.defaults();
         this.onFinished = onFinished;
         this.onQuit = onQuit;
+        this.laneKeys = effectiveSettings.laneKeys();
 
         this.runtimeNotes = new ArrayList<>(context.notes().size());
         for (Note n : context.notes()) {
@@ -305,18 +247,15 @@ public final class GameScreen {
             return;
         }
 
-        // Delta między klatkami (z zegara ściennego). Aktualizujemy zawsze — także w
-        // pauzie — aby po wznowieniu delta nie zawierała całego czasu pauzy.
-        double frameDtMs = (lastFrameNanos < 0)
-                ? 0
-                : (nowNanos - lastFrameNanos) / 1_000_000.0;
-        frameDtMs = Math.min(frameDtMs, 100.0); // zabezpieczenie po zacięciu/minimalizacji
-        lastFrameNanos = nowNanos;
-
         // W pauzie zamrażamy stan gry: nie przesuwamy czasu, nie naliczamy MISS-ów,
         // nie wygaszamy popupów. Rysujemy wciąż scenę + nakładkę pauzy.
         if (!paused) {
-            advanceClock(frameDtMs);
+            // Audio jest źródłem prawdy o czasie. Jeśli go brakuje (tryb demo / błąd
+            // ładowania), używamy upływu czasu od startu pętli, żeby gra dalej działała
+            // dla celów demonstracyjnych.
+            currentTimeMs = (player != null)
+                    ? player.getCurrentTime().toMillis()
+                    : (nowNanos - loopStartNanos) / 1_000_000.0;
 
             markPassedNotesAsMisses();
             popups.removeIf(p -> p.isExpired(nowNanos));
@@ -326,45 +265,6 @@ public final class GameScreen {
 
         if (!paused && currentTimeMs >= songEndTimeMs) {
             finishIfNotYet();
-        }
-    }
-
-    /**
-     * Posuwa zegar gry o deltę zegara ściennego i delikatnie koryguje go do audio.
-     * MediaPlayer.getCurrentTime() bywa gruboziarnisty (zwłaszcza dla WAV), więc
-     * interpolujemy między jego próbkami zamiast czytać go wprost co klatkę.
-     */
-    private void advanceClock(double frameDtMs) {
-        if (player == null) {
-            // tryb bez audio: czysty zegar ścienny od startu pętli
-            currentTimeMs = (lastFrameNanos - loopStartNanos) / 1_000_000.0;
-            return;
-        }
-
-        double raw = player.getCurrentTime().toMillis();
-
-        // Dopóki audio realnie nie ruszyło (asynchroniczny start/buforowanie, zwłaszcza
-        // przy MP3), NIE wyprzedzamy go zegarem ściennym — inaczej w chwili faktycznego
-        // startu dryf urósłby i twardy sync cofnąłby nuty („przeskok miejsc”).
-        boolean playing = player.getStatus() == MediaPlayer.Status.PLAYING;
-        if (!playing || (raw <= 0 && currentTimeMs <= 0)) {
-            currentTimeMs = raw;
-            lastRawAudioMs = raw;
-            return;
-        }
-
-        if (raw != lastRawAudioMs) {
-            // świeża próbka z mediów — koryguj dryf do dźwięku
-            double drift = raw - currentTimeMs;
-            if (Math.abs(drift) > 150) {
-                currentTimeMs = raw; // seek / duża luka / stall — twardy sync
-            } else {
-                currentTimeMs += frameDtMs + drift * 0.15; // płynna korekta
-            }
-            lastRawAudioMs = raw;
-        } else {
-            // zegar mediów stoi między próbkami — interpoluj po zegarze ściennym
-            currentTimeMs += frameDtMs;
         }
     }
 
@@ -471,9 +371,9 @@ public final class GameScreen {
         }
     }
 
-    private static int laneFor(KeyCode key) {
-        for (int i = 0; i < LANES; i++) {
-            if (LANE_KEYS[i] == key) return i;
+    private int laneFor(KeyCode key) {
+        for (int i = 0; i < laneKeys.length; i++) {
+            if (laneKeys[i] == key) return i;
         }
         return -1;
     }
@@ -556,10 +456,10 @@ public final class GameScreen {
     }
 
     private void spawnJudgmentPopup(int lane, HitJudgment judgment) {
-        boolean placed = computePlacement(lane, 0);
-        double cx = placed ? npX
+        NotePlacement target = notePlacement(lane, 0);
+        double cx = target != null ? target.centerX
                 : SIDE_MARGIN + lane * LANE_WIDTH + LANE_WIDTH / 2.0;
-        double cy = placed ? npY - npH
+        double cy = target != null ? target.centerY - target.height
                 : HIT_LINE_Y - NOTE_HEIGHT;
 
         String label = switch (judgment) {
@@ -788,7 +688,7 @@ public final class GameScreen {
         double scale = 0.3 + 0.7 * easeOutBack(rp);
         double cx = CANVAS_WIDTH / 2.0;
         double cy = 232;
-        double ringR = RANK_STAMP_RING_RADIUS;
+        double ringR = 78;
         Rank rank = result.rank();
         double a = Math.min(1, rp);
 
@@ -801,18 +701,12 @@ public final class GameScreen {
         g.save();
         g.translate(cx, cy);
         g.scale(scale, scale);
-
-        RankStampLayout layout = rankStampLayout != null
-                ? rankStampLayout
-                : computeRankStampLayout(rank, ringR);
-        g.scale(layout.fitScale(), layout.fitScale());
-
-        PersonaText.draw(g, rank.label(), 0, layout.baselineY(), RANK_STAMP_FONT,
+        PersonaText.draw(g, rank.label(), 0, 48, PersonaFonts.display(140),
                 rank.color(), PersonaPalette.BLACK, 6, rank.color(0.5),
-                0, TextAlignment.CENTER);
+                PersonaText.SLANT, TextAlignment.CENTER);
         g.restore();
 
-        PersonaText.plain(g, "RANGA", cx, cy + 50, PersonaFonts.label(12),
+        PersonaText.plain(g, "RANGA", cx, cy + 100, PersonaFonts.label(12),
                 PersonaPalette.alpha(PersonaPalette.WHITE_DIM, a), TextAlignment.CENTER);
     }
 
@@ -849,49 +743,48 @@ public final class GameScreen {
         g.fillRect(0, 0, CANVAS_WIDTH, HIT_LINE_Y + 40);
 
         // Diagonalna faktura tła (poza autostradą) — klimat P3R
-        g.setStroke(DIAG_LINE);
+        g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA, 0.05));
         g.setLineWidth(1);
         for (int i = -2; i < 10; i++) {
             double x0 = i * 60;
             g.strokeLine(x0, 0, x0 + CANVAS_HEIGHT * 0.4, CANVAS_HEIGHT);
         }
 
-        g.setFill(SIDE_MASK);
+        g.setFill(PersonaPalette.alpha(PersonaPalette.BLACK, 0.45));
         g.fillRect(0, 0, SIDE_MARGIN - 6, CANVAS_HEIGHT);
         g.fillRect(SIDE_MARGIN + LANES * LANE_WIDTH + 6, 0, SIDE_MARGIN - 6, CANVAS_HEIGHT);
     }
 
     private void drawLanes(GraphicsContext g, long nowNanos) {
         // Podświetlenie horyzontu (głębia autostrady)
-        g.setFill(HORIZON_TRI);
+        g.setFill(PersonaPalette.alpha(PersonaPalette.AQUA, 0.12));
         g.fillPolygon(
                 new double[]{VANISH_CENTER_X - 6, VANISH_CENTER_X + 6, VANISH_CENTER_X},
                 new double[]{VANISH_Y, VANISH_Y, VANISH_Y - 28},
                 3);
 
         for (int lane = 0; lane < LANES; lane++) {
-            double topL = LANE_TOP_L[lane];
-            double topR = LANE_TOP_R[lane];
-            double hitL = LANE_HIT_L[lane];
-            double hitR = LANE_HIT_R[lane];
+            double[] top = laneBoundsAtDepth(lane, 0);
+            double[] hit = laneBoundsAtDepth(lane, 1);
             double bottomL = SIDE_MARGIN + lane * LANE_WIDTH;
             double bottomR = SIDE_MARGIN + (lane + 1) * LANE_WIDTH;
+            Color laneTint = PersonaPalette.lane(lane);
 
-            g.setFill(laneHeld[lane] ? LANE_FILL_HELD[lane] : LANE_FILL_IDLE[lane]);
+            g.setFill(PersonaPalette.alpha(laneTint, laneHeld[lane] ? 0.18 : 0.05));
             g.fillPolygon(
-                    new double[]{topL, topR, hitR, bottomR, bottomL, hitL},
+                    new double[]{top[0], top[1], hit[1], bottomR, bottomL, hit[0]},
                     new double[]{VANISH_Y, VANISH_Y, HIT_LINE_Y, CANVAS_HEIGHT, CANVAS_HEIGHT, HIT_LINE_Y},
                     6);
 
-            g.setStroke(LANE_LINE);
+            g.setStroke(PersonaPalette.alpha(PersonaPalette.WHITE, 0.12));
             g.setLineWidth(1);
-            g.strokeLine(topR, VANISH_Y, bottomR, CANVAS_HEIGHT);
+            g.strokeLine(top[1], VANISH_Y, bottomR, CANVAS_HEIGHT);
 
             if (nowNanos < laneFlashUntilNanos[lane]) {
                 double alpha = (laneFlashUntilNanos[lane] - nowNanos) / 180_000_000.0;
-                g.setFill(PersonaPalette.alpha(PersonaPalette.lane(lane), 0.42 * alpha));
+                g.setFill(PersonaPalette.alpha(laneTint, 0.42 * alpha));
                 g.fillPolygon(
-                        new double[]{topL, topR, hitR, bottomR, bottomL, hitL},
+                        new double[]{top[0], top[1], hit[1], bottomR, bottomL, hit[0]},
                         new double[]{VANISH_Y, VANISH_Y, HIT_LINE_Y, CANVAS_HEIGHT, CANVAS_HEIGHT, HIT_LINE_Y},
                         6);
             }
@@ -901,30 +794,30 @@ public final class GameScreen {
         for (int i = 1; i <= 6; i++) {
             double depth = i / 7.0;
             double y = VANISH_Y + (HIT_LINE_Y - VANISH_Y) * depth;
-            double left = laneLeftAtDepth(0, depth);
-            double right = laneRightAtDepth(LANES - 1, depth);
-            g.setStroke(CROSSBAR[i - 1]);
+            double left = laneBoundsAtDepth(0, depth)[0];
+            double right = laneBoundsAtDepth(LANES - 1, depth)[1];
+            g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA, 0.05 + 0.12 * depth));
             g.setLineWidth(1);
             g.strokeLine(left, y, right, y);
         }
 
         // Neonowa rama gryfu (poświata + ostra linia) — sygnatura P3R
-        double leftTopL = LANE_TOP_L[0];
-        double rightTopR = LANE_TOP_R[LANES - 1];
+        double[] leftTop = laneBoundsAtDepth(0, 0);
+        double[] rightTop = laneBoundsAtDepth(LANES - 1, 0);
         double bx0 = SIDE_MARGIN;
         double bx1 = SIDE_MARGIN + LANES * LANE_WIDTH;
 
-        g.setStroke(FRAME_GLOW);
+        g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA, 0.25));
         g.setLineWidth(6);
-        g.strokeLine(leftTopL, VANISH_Y, bx0, CANVAS_HEIGHT);
-        g.strokeLine(rightTopR, VANISH_Y, bx1, CANVAS_HEIGHT);
-        g.strokeLine(leftTopL, VANISH_Y, rightTopR, VANISH_Y);
+        g.strokeLine(leftTop[0], VANISH_Y, bx0, CANVAS_HEIGHT);
+        g.strokeLine(rightTop[1], VANISH_Y, bx1, CANVAS_HEIGHT);
+        g.strokeLine(leftTop[0], VANISH_Y, rightTop[1], VANISH_Y);
 
         g.setStroke(PersonaPalette.AQUA_BRIGHT);
         g.setLineWidth(2.5);
-        g.strokeLine(leftTopL, VANISH_Y, bx0, CANVAS_HEIGHT);
-        g.strokeLine(rightTopR, VANISH_Y, bx1, CANVAS_HEIGHT);
-        g.strokeLine(leftTopL, VANISH_Y, rightTopR, VANISH_Y);
+        g.strokeLine(leftTop[0], VANISH_Y, bx0, CANVAS_HEIGHT);
+        g.strokeLine(rightTop[1], VANISH_Y, bx1, CANVAS_HEIGHT);
+        g.strokeLine(leftTop[0], VANISH_Y, rightTop[1], VANISH_Y);
     }
 
     private void drawHitLine(GraphicsContext g) {
@@ -932,32 +825,33 @@ public final class GameScreen {
         double highwayW = LANE_WIDTH * LANES;
 
         // Świecący pasek hit-line
-        g.setFill(HITLINE_FILL);
+        g.setFill(PersonaPalette.alpha(PersonaPalette.AQUA, 0.06));
         g.fillRect(highwayL, HIT_LINE_Y - 16, highwayW, 32);
         g.setStroke(PersonaPalette.AQUA_BRIGHT);
         g.setLineWidth(2);
         g.strokeLine(highwayL, HIT_LINE_Y, highwayL + highwayW, HIT_LINE_Y);
 
         for (int lane = 0; lane < LANES; lane++) {
-            if (!computePlacement(lane, 0)) continue;
+            NotePlacement target = notePlacement(lane, 0);
+            if (target == null) continue;
 
             Color laneCol = PersonaPalette.lane(lane);
-            CrystalNote.drawReceptor(g, npX, npY, npW, npH, laneCol, laneHeld[lane]);
-            drawKeyPill(g, lane, npX);
+            CrystalNote.drawReceptor(g, target.centerX, target.centerY,
+                    target.width, target.height, laneCol, laneHeld[lane]);
+            drawKeyPill(g, lane, target.centerX, laneCol);
         }
     }
 
-    private void drawKeyPill(GraphicsContext g, int lane, double centerX) {
-        String key = LANE_KEYS[lane].getName();
+    private void drawKeyPill(GraphicsContext g, int lane, double centerX, Color laneCol) {
+        String key = laneKeys[lane].getName();
         double pillW = 30;
         double pillH = 24;
         double px = centerX - pillW / 2.0;
-        double progressBarTop = CANVAS_HEIGHT - 36;
-        double py = Math.min(HIT_LINE_Y + 30, progressBarTop - pillH - 8);
+        double py = HIT_LINE_Y + 40;
 
-        g.setFill(KEYPILL_BG);
+        g.setFill(PersonaPalette.alpha(PersonaPalette.BLACK, 0.6));
         g.fillRect(px, py, pillW, pillH);
-        g.setStroke(laneHeld[lane] ? PersonaPalette.AQUA_BRIGHT : LANE_KEY_STROKE[lane]);
+        g.setStroke(laneHeld[lane] ? PersonaPalette.AQUA_BRIGHT : PersonaPalette.alpha(laneCol, 0.9));
         g.setLineWidth(laneHeld[lane] ? 2.0 : 1.5);
         g.strokeRect(px + 0.5, py + 0.5, pillW - 1, pillH - 1);
 
@@ -967,46 +861,25 @@ public final class GameScreen {
     }
 
     private void drawNotes(GraphicsContext g) {
-        // Rysujemy wyłącznie nuty z okna widoczności (lista posortowana po czasie),
-        // od najdalszych do najbliższych — bez listy/sortu/alokacji rekordów na klatkę.
-        int cur = (int) currentTimeMs;
-        int n = runtimeNotes.size();
-        int lo = firstVisibleIndex(cur - 120);
-        int upper = cur + LOOK_AHEAD_MS;
-        int hi = lo;
-        while (hi < n && runtimeNotes.get(hi).note.timeMs() <= upper) {
-            hi++;
+        // Dalekie nuty rysujemy pierwsze (nakładanie jak na autostradzie 3D).
+        List<DrawNote> visible = new ArrayList<>();
+        for (RuntimeNote rn : runtimeNotes) {
+            if (rn.processed) continue;
+            int dt = rn.note.timeMs() - (int) currentTimeMs;
+            NotePlacement place = notePlacement(rn.note.lane(), dt);
+            if (place == null) continue;
+            visible.add(new DrawNote(rn.note.lane(), place));
         }
-        // Większy indeks = większy czas = większy dt = dalej (mniejsza głębokość):
-        // iterując malejąco rysujemy od tyłu do przodu (najbliższe na wierzchu).
-        for (int i = hi - 1; i >= lo; i--) {
-            RuntimeNote rn = runtimeNotes.get(i);
-            if (rn.processed) {
-                continue;
-            }
-            if (!computePlacement(rn.note.lane(), rn.note.timeMs() - cur)) {
-                continue;
-            }
+        visible.sort(Comparator.comparingDouble(d -> d.place.depth));
+
+        for (DrawNote dn : visible) {
+            NotePlacement place = dn.place;
             // Kryształ skalujemy lekko w pionie, by „odłamek” był wyrazisty
             // (geometria/kolizja w logice gry pozostaje bez zmian — to tylko render).
-            CrystalNote.draw(g, npX, npY, npW * 1.25, npH * 2.0,
-                    npDepth, PersonaPalette.lane(rn.note.lane()));
+            CrystalNote.draw(g, place.centerX, place.centerY,
+                    place.width * 1.25, place.height * 2.0,
+                    place.depth, PersonaPalette.lane(dn.lane));
         }
-    }
-
-    /** Pierwszy indeks nuty o timeMs >= threshold (binary search; lista sortowana po czasie). */
-    private int firstVisibleIndex(int thresholdMs) {
-        int lo = 0;
-        int hi = runtimeNotes.size();
-        while (lo < hi) {
-            int mid = (lo + hi) >>> 1;
-            if (runtimeNotes.get(mid).note.timeMs() < thresholdMs) {
-                lo = mid + 1;
-            } else {
-                hi = mid;
-            }
-        }
-        return lo;
     }
 
     /**
@@ -1020,26 +893,33 @@ public final class GameScreen {
         return Math.pow(linear, PERSPECTIVE_CURVE);
     }
 
-    /** Lewa krawędź ścieżki przy danej głębokości (0..1) — bez alokacji. */
-    private static double laneLeftAtDepth(int lane, double depth) {
-        return LANE_TOP_L[lane] + (LANE_HIT_L[lane] - LANE_TOP_L[lane]) * depth;
+    /** Lewa i prawa krawędź ścieżki przy danej głębokości (0..1). */
+    private static double[] laneBoundsAtDepth(int lane, double depth) {
+        double topL = vanishLaneLeft(lane);
+        double topR = topL + TOP_LANE_WIDTH;
+        double hitL = SIDE_MARGIN + lane * LANE_WIDTH;
+        double hitR = SIDE_MARGIN + (lane + 1) * LANE_WIDTH;
+        return new double[]{
+                topL + (hitL - topL) * depth,
+                topR + (hitR - topR) * depth
+        };
     }
 
-    /** Prawa krawędź ścieżki przy danej głębokości (0..1) — bez alokacji. */
-    private static double laneRightAtDepth(int lane, double depth) {
-        return LANE_TOP_R[lane] + (LANE_HIT_R[lane] - LANE_TOP_R[lane]) * depth;
+    private static double vanishLaneLeft(int lane) {
+        double totalTop = LANES * TOP_LANE_WIDTH;
+        return VANISH_CENTER_X - totalTop / 2.0 + lane * TOP_LANE_WIDTH;
     }
 
-    /**
-     * Wylicza pozycję nuty do pól scratch (npX/npY/npW/npH/npDepth) bez alokacji.
-     * Zwraca false, gdy nuta jest poza widocznym oknem ekranu.
-     */
-    private boolean computePlacement(int lane, int dtMs) {
-        if (dtMs > LOOK_AHEAD_MS || dtMs < -120) {
-            return false;
-        }
+    private NotePlacement notePlacement(int lane, int dtMs) {
         double depth;
         double centerY;
+
+        if (dtMs > LOOK_AHEAD_MS) {
+            return null;
+        }
+        if (dtMs < -120) {
+            return null;
+        }
         if (dtMs <= 0) {
             depth = 1.0;
             centerY = HIT_LINE_Y - dtMs * PAST_HIT_SPEED_PX_PER_MS;
@@ -1049,19 +929,24 @@ public final class GameScreen {
         }
 
         if (centerY + NOTE_HEIGHT < VANISH_Y - 40 || centerY > CANVAS_HEIGHT + 40) {
-            return false;
+            return null;
         }
 
+        double[] bounds = laneBoundsAtDepth(lane, depth);
         double inset = 4 + 6 * (1 - depth);
-        double left = laneLeftAtDepth(lane, depth) + inset;
-        double right = laneRightAtDepth(lane, depth) - inset;
-        npDepth = depth;
-        npY = centerY;
-        npW = Math.max(4, right - left);
-        npH = NOTE_HEIGHT * (MIN_NOTE_SCALE + (1 - MIN_NOTE_SCALE) * depth);
-        npX = (left + right) / 2.0;
-        return true;
+        double left = bounds[0] + inset;
+        double right = bounds[1] - inset;
+        double width = Math.max(4, right - left);
+        double height = NOTE_HEIGHT * (MIN_NOTE_SCALE + (1 - MIN_NOTE_SCALE) * depth);
+        double centerX = (left + right) / 2.0;
+
+        return new NotePlacement(centerX, centerY, width, height, depth);
     }
+
+    private record NotePlacement(
+            double centerX, double centerY, double width, double height, double depth) {}
+
+    private record DrawNote(int lane, NotePlacement place) {}
 
     private void drawHud(GraphicsContext g, long nowNanos) {
         int scoreVal = score.totalScore();
@@ -1215,7 +1100,6 @@ public final class GameScreen {
             player.stop();
         }
         result = score.toResult(context.songId());
-        rankStampLayout = computeRankStampLayout(result.rank(), RANK_STAMP_RING_RADIUS);
         LOG.info(() -> "GameResult: " + result);
         showingResults = true;
         resultsStartNanos = System.nanoTime();
@@ -1242,16 +1126,4 @@ public final class GameScreen {
 
         RuntimeNote(Note note) { this.note = note; }
     }
-
-    private static RankStampLayout computeRankStampLayout(Rank rank, double ringR) {
-        Text measure = new Text(rank.label());
-        measure.setFont(RANK_STAMP_FONT);
-        var bounds = measure.getLayoutBounds();
-        double maxDim = Math.max(1.0, Math.max(bounds.getWidth(), bounds.getHeight()));
-        double fitScale = (ringR * 1.5) / maxDim;
-        double baselineY = -(bounds.getMinY() + bounds.getHeight() / 2.0);
-        return new RankStampLayout(fitScale, baselineY);
-    }
-
-    private record RankStampLayout(double fitScale, double baselineY) {}
 }

@@ -71,9 +71,10 @@ public final class PersonaMenuTheme {
     }
 
     public static String statusBar() {
-        return "-fx-background-color: transparent;"
-             + "-fx-border-color: transparent;"
-             + "-fx-padding: 0;";
+        return "-fx-background-color: rgba(6, 16, 31, 0.85);"
+             + "-fx-border-color: " + ACCENT + " transparent transparent transparent;"
+             + "-fx-border-width: 1 0 0 0;"
+             + "-fx-padding: 10 0 0 0;";
     }
 
     public static String indexLabel() {

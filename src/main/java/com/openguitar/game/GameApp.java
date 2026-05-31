@@ -37,8 +37,10 @@ public class GameApp extends Application {
     private static final Logger LOG = Logger.getLogger(GameApp.class.getName());
     private static final Path SONGS_DIR = Paths.get("songs").toAbsolutePath();
     private static final Path STATS_FILE = Paths.get("stats.db").toAbsolutePath();
+    private static final Path CONFIG_FILE = Paths.get("config.properties").toAbsolutePath();
 
     private final StatsStore stats = new StatsStore(STATS_FILE);
+    private final SettingsStore settings = new SettingsStore(CONFIG_FILE);
     private Stage stage;
     /** Czy po zakończeniu utworu wracamy do menu (true), czy zamykamy okno (false). */
     private boolean returnToMenuAfterSong = true;
@@ -87,13 +89,14 @@ public class GameApp extends Application {
                 SONGS_DIR,
                 this::launchGame,
                 Platform::exit,
-                stats
+                stats,
+                settings
         );
         showScene(menu.getScene(), "OpenGuitar");
     }
 
     private void launchGame(SongContext context) {
-        GameScreen screen = new GameScreen(context, this::onSongFinished, this::launchMenu);
+        GameScreen screen = new GameScreen(context, settings.current(), this::onSongFinished, this::launchMenu);
         activeGame = screen;
         showScene(screen.getScene(), "OpenGuitar - " + context.title());
         screen.start();
