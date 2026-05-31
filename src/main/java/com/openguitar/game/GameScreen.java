@@ -111,6 +111,8 @@ public final class GameScreen {
 
     /** Opcje ekranu pauzy. */
     private static final String[] PAUSE_OPTIONS = {"WZNÓW", "WYJDŹ DO MENU"};
+    private static final Font RANK_STAMP_FONT = PersonaFonts.display(140);
+    private static final double RANK_STAMP_RING_RADIUS = 78;
 
     // ---------- stan ----------
     private final SongContext context;
@@ -156,6 +158,7 @@ public final class GameScreen {
     private boolean showingResults = false;
     private long resultsStartNanos = 0;
     private GameResult result;
+    private RankStampLayout rankStampLayout;
 
     // ---------- konstrukcja ----------
 
@@ -690,7 +693,7 @@ public final class GameScreen {
         double scale = 0.3 + 0.7 * easeOutBack(rp);
         double cx = CANVAS_WIDTH / 2.0;
         double cy = 232;
-        double ringR = 78;
+        double ringR = RANK_STAMP_RING_RADIUS;
         Rank rank = result.rank();
         double a = Math.min(1, rp);
 
@@ -704,17 +707,12 @@ public final class GameScreen {
         g.translate(cx, cy);
         g.scale(scale, scale);
 
-        Font rankFont = PersonaFonts.display(140);
-        Text measure = new Text(rank.label());
-        measure.setFont(rankFont);
-        var bounds = measure.getLayoutBounds();
+        RankStampLayout layout = rankStampLayout != null
+                ? rankStampLayout
+                : computeRankStampLayout(rank, ringR);
+        g.scale(layout.fitScale(), layout.fitScale());
 
-        double maxDim = Math.max(bounds.getWidth(), bounds.getHeight());
-        double fitScale = (ringR * 1.5) / maxDim;
-        g.scale(fitScale, fitScale);
-
-        double baselineY = -(bounds.getMinY() + bounds.getHeight() / 2.0);
-        PersonaText.draw(g, rank.label(), 0, baselineY, rankFont,
+        PersonaText.draw(g, rank.label(), 0, layout.baselineY(), RANK_STAMP_FONT,
                 rank.color(), PersonaPalette.BLACK, 6, rank.color(0.5),
                 0, TextAlignment.CENTER);
         g.restore();
@@ -860,7 +858,8 @@ public final class GameScreen {
         double pillW = 30;
         double pillH = 24;
         double px = centerX - pillW / 2.0;
-        double py = HIT_LINE_Y + 40;
+        double progressBarTop = CANVAS_HEIGHT - 36;
+        double py = Math.min(HIT_LINE_Y + 30, progressBarTop - pillH - 8);
 
         g.setFill(PersonaPalette.alpha(PersonaPalette.BLACK, 0.6));
         g.fillRect(px, py, pillW, pillH);
@@ -1113,6 +1112,7 @@ public final class GameScreen {
             player.stop();
         }
         result = score.toResult(context.songId());
+        rankStampLayout = computeRankStampLayout(result.rank(), RANK_STAMP_RING_RADIUS);
         LOG.info(() -> "GameResult: " + result);
         showingResults = true;
         resultsStartNanos = System.nanoTime();
@@ -1139,4 +1139,16 @@ public final class GameScreen {
 
         RuntimeNote(Note note) { this.note = note; }
     }
+
+    private static RankStampLayout computeRankStampLayout(Rank rank, double ringR) {
+        Text measure = new Text(rank.label());
+        measure.setFont(RANK_STAMP_FONT);
+        var bounds = measure.getLayoutBounds();
+        double maxDim = Math.max(1.0, Math.max(bounds.getWidth(), bounds.getHeight()));
+        double fitScale = (ringR * 1.5) / maxDim;
+        double baselineY = -(bounds.getMinY() + bounds.getHeight() / 2.0);
+        return new RankStampLayout(fitScale, baselineY);
+    }
+
+    private record RankStampLayout(double fitScale, double baselineY) {}
 }
