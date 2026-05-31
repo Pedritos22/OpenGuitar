@@ -953,12 +953,14 @@ public final class MenuScreen {
 
         Slider slider = new Slider(GameSettings.VOLUME_MIN, GameSettings.VOLUME_MAX, initialPercent);
         slider.setBlockIncrement(1);
-        slider.setSnapToTicks(false);
+        slider.setMajorTickUnit(1);
+        slider.setMinorTickCount(0);
+        slider.setSnapToTicks(true);
         slider.setStyle(PersonaMenuTheme.volumeSlider());
         slider.setMaxWidth(Double.MAX_VALUE);
 
         slider.valueProperty().addListener((obs, oldVal, newVal) -> {
-            int v = newVal.intValue();
+            int v = (int) Math.round(newVal.doubleValue());
             pct.setText(v + "%");
             onVolumeChange.accept(v);
         });
