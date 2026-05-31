@@ -5,8 +5,12 @@ import com.openguitar.beatmap.BeatmapLoader;
 import com.openguitar.beatmap.SongContext;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
 import javafx.stage.Stage;
 
 import java.nio.file.Files;
@@ -34,7 +38,9 @@ public class GameApp extends Application {
 
     private static final Logger LOG = Logger.getLogger(GameApp.class.getName());
     private static final Path SONGS_DIR = Paths.get("songs").toAbsolutePath();
+    private static final Path STATS_FILE = Paths.get("stats.json").toAbsolutePath();
 
+    private final StatsStore stats = new StatsStore(STATS_FILE);
     private Stage stage;
     /** Czy po zakończeniu utworu wracamy do menu (true), czy zamykamy okno (false). */
     private boolean returnToMenuAfterSong = true;
@@ -43,9 +49,19 @@ public class GameApp extends Application {
 
     @Override
     public void start(Stage stage) {
+        com.openguitar.game.view.PersonaFonts.init(); // ładujemy fonty P3R raz, przed budową scen
         this.stage = stage;
-        stage.setResizable(false);
+        stage.setResizable(true);
         stage.setTitle("OpenGuitar");
+        // F11 przełącza pełny ekran; ESC ma być wolny dla pauzy (nie wychodzi z fullscreen).
+        stage.setFullScreenExitKeyCombination(KeyCombination.NO_MATCH);
+        stage.setFullScreenExitHint("F11 — przełącz pełny ekran");
+        stage.addEventHandler(KeyEvent.KEY_PRESSED, e -> {
+            if (e.getCode() == KeyCode.F11) {
+                stage.setFullScreen(!stage.isFullScreen());
+                e.consume();
+            }
+        });
         stage.setOnCloseRequest(e -> {
             if (activeGame != null) activeGame.stop();
             Platform.exit();
@@ -71,23 +87,38 @@ public class GameApp extends Application {
         MenuScreen menu = new MenuScreen(
                 SONGS_DIR,
                 this::launchGame,
-                Platform::exit
+                Platform::exit,
+                stats
         );
-        stage.setScene(menu.getScene());
-        stage.setTitle("OpenGuitar");
+        showScene(menu.getScene(), "OpenGuitar");
     }
 
     private void launchGame(SongContext context) {
-        GameScreen screen = new GameScreen(context, this::onSongFinished);
+        GameScreen screen = new GameScreen(context, this::onSongFinished, this::launchMenu);
         activeGame = screen;
-        stage.setScene(screen.getScene());
-        stage.setTitle("OpenGuitar - " + context.title());
+        showScene(screen.getScene(), "OpenGuitar - " + context.title());
         screen.start();
+    }
+
+    /**
+     * Podmienia scenę zachowując tryb pełnoekranowy. JavaFX (zwłaszcza na macOS)
+     * potrafi wyjść z fullscreen przy {@code setScene} — ponownie go wymuszamy,
+     * dzięki czemu po kliknięciu „Graj” gra zostaje na pełnym ekranie aż do
+     * świadomego wyjścia (F11).
+     */
+    private void showScene(Scene scene, String title) {
+        boolean wasFullScreen = stage.isFullScreen();
+        stage.setScene(scene);
+        stage.setTitle(title);
+        if (wasFullScreen && !stage.isFullScreen()) {
+            stage.setFullScreen(true);
+        }
     }
 
     private void onSongFinished(GameResult result) {
         LOG.info(() -> "Wynik: " + result);
         activeGame = null;
+        stats.record(result);
 
         // UWAGA: ten callback jest wywoływany z wnętrza AnimationTimer (puls renderowania)
         // lub z setOnEndOfMedia. JavaFX zabrania pokazywania modalnych dialogów

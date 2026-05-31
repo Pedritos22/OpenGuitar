@@ -2,6 +2,9 @@ package com.openguitar.game;
 
 import com.openguitar.beatmap.BeatmapEngine;
 import com.openguitar.beatmap.SongContext;
+import com.openguitar.game.view.FullscreenScaler;
+import com.openguitar.game.view.PersonaFonts;
+import com.openguitar.game.view.PersonaMenuFx;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -12,7 +15,7 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -24,6 +27,7 @@ import javafx.scene.paint.Color;
 import java.awt.Desktop;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.logging.Level;
@@ -46,21 +50,37 @@ public final class MenuScreen {
     private final Path songsDir;
     private final Consumer<SongContext> onSongSelected;
     private final Runnable onExit;
+    private final StatsStore stats;
 
     private final Scene scene;
     private final VBox songsList;
     private final Label statusLabel;
 
-    public MenuScreen(Path songsDir, Consumer<SongContext> onSongSelected, Runnable onExit) {
+    /** Uchwyty wierszy do nawigacji klawiaturą (czysto widokowe). */
+    private final List<RowHandle> navRows = new ArrayList<>();
+    private int selectedIndex = -1;
+
+    /** Panel statystyk — przypisany do aktualnie wybranej piosenki. */
+    private final Label statCaption = new Label("STATYSTYKI");
+    private final Label statPlays = statValueLabel();
+    private final Label statBest = statValueLabel();
+    private final Label statCombo = statValueLabel();
+
+    public MenuScreen(Path songsDir, Consumer<SongContext> onSongSelected, Runnable onExit,
+                      StatsStore stats) {
         this.songsDir = songsDir;
         this.onSongSelected = onSongSelected;
         this.onExit = onExit;
+        this.stats = stats;
 
         MenuBackground background = new MenuBackground();
         background.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
 
         songsList = new VBox(6);
         songsList.setFillWidth(true);
+        // Zapas poziomy, żeby ukos (Shear) i wysuwanie wiersza nie wychodziły poza
+        // widoczny obszar ScrollPane (który by je przyciął).
+        songsList.setPadding(new Insets(2, 22, 2, 14));
 
         statusLabel = ellipsisLabel(" ");
         statusLabel.setStyle(PersonaMenuTheme.statusText());
@@ -74,11 +94,9 @@ public final class MenuScreen {
         content.setBottom(buildFooter());
 
         StackPane root = new StackPane(background, content);
-        this.scene = new Scene(root, WIDTH, HEIGHT);
+        this.scene = new Scene(FullscreenScaler.wrap(root, WIDTH, HEIGHT), WIDTH, HEIGHT);
         this.scene.setFill(Color.web(PersonaMenuTheme.BG_DEEP));
-        this.scene.setOnKeyPressed(e -> {
-            if (e.getCode() == KeyCode.ESCAPE) onExit.run();
-        });
+        this.scene.setOnKeyPressed(this::handleMenuKey);
 
         reload();
     }
@@ -102,6 +120,7 @@ public final class MenuScreen {
 
         HBox title = new HBox(open, guitar);
         title.setAlignment(Pos.CENTER_LEFT);
+        PersonaMenuFx.slant(title, -0.18); // pochył „logo” w stylu P3R
 
         Button songsBtn = toolbarButton("Songs");
         songsBtn.setOnAction(e -> openSongsFolder());
@@ -119,9 +138,61 @@ public final class MenuScreen {
         divider.setStyle(PersonaMenuTheme.divider());
         divider.setMaxWidth(Double.MAX_VALUE);
 
-        VBox header = new VBox(14, top, divider);
+        VBox header = new VBox(12, top, divider, buildStatsBar());
         BorderPane.setMargin(header, new Insets(0, 0, 14, 0));
         return header;
+    }
+
+    private VBox buildStatsBar() {
+        statCaption.setStyle(PersonaMenuTheme.sectionLabel());
+
+        HBox chips = new HBox(8,
+                statChip("PODEJŚCIA", statPlays),
+                statChip("NAJLEPSZY WYNIK", statBest),
+                statChip("MAX COMBO", statCombo));
+        chips.setMaxWidth(Double.MAX_VALUE);
+
+        VBox box = new VBox(6, statCaption, chips);
+        box.setMaxWidth(Double.MAX_VALUE);
+        return box;
+    }
+
+    private static Label statValueLabel() {
+        Label v = new Label("—");
+        v.setFont(PersonaFonts.display(24));
+        v.setTextFill(Color.web(PersonaMenuTheme.TEXT));
+        return v;
+    }
+
+    private static Region statChip(String label, Label valueLabel) {
+        Label l = new Label(label);
+        l.setFont(PersonaFonts.label(10));
+        l.setTextFill(Color.web(PersonaMenuTheme.ACCENT));
+
+        VBox box = new VBox(-2, l, valueLabel);
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.setPadding(new Insets(6, 12, 6, 12));
+        box.setStyle("-fx-background-color: rgba(10, 29, 58, 0.7);"
+                + "-fx-border-color: " + PersonaMenuTheme.BORDER + " " + PersonaMenuTheme.BORDER
+                + " " + PersonaMenuTheme.BORDER + " " + PersonaMenuTheme.ACCENT + ";"
+                + "-fx-border-width: 1 1 1 3;");
+        box.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(box, Priority.ALWAYS);
+        return box;
+    }
+
+    /** Aktualizuje panel statystyk pod kątem aktualnie wybranego wiersza. */
+    private void updateStatsPanel(RowHandle h) {
+        statCaption.setText("STATYSTYKI · " + (h.title != null ? h.title : "—"));
+        var stat = (h.songId != null) ? stats.forSong(h.songId) : java.util.Optional.<StatsStore.SongStat>empty();
+        statPlays.setText(stat.map(s -> String.valueOf(s.plays)).orElse("0"));
+        statBest.setText(stat.map(s -> formatNumber(s.bestScore)).orElse("0"));
+        statCombo.setText(stat.map(s -> String.valueOf(s.maxCombo)).orElse("0"));
+    }
+
+    private static String formatNumber(int n) {
+        if (n < 1000) return String.valueOf(n);
+        return String.format("%,d", n).replace(',', ' ');
     }
 
     private VBox buildListArea() {
@@ -180,6 +251,10 @@ public final class MenuScreen {
         Label meta = ellipsisLabel(metaLine(entry, ready ? entry.context() : null));
         meta.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
         meta.setFont(PersonaMenuTheme.bodyFont(10));
+        if (ready) {
+            stats.forSong(entry.context().songId()).ifPresent(st ->
+                    meta.setText(meta.getText() + "   ·   BEST " + formatNumber(st.bestScore)));
+        }
 
         Label badge = new Label(ready ? "Gotowe" : "Brak mapy");
         badge.setStyle(ready ? PersonaMenuTheme.badgeReady() : PersonaMenuTheme.badgePending());
@@ -206,13 +281,24 @@ public final class MenuScreen {
 
         HBox row = new HBox(10, num, info, actions);
         row.setAlignment(Pos.CENTER_LEFT);
-        row.setPadding(new Insets(0, 12, 0, 8));
-        row.setMinHeight(52);
-        row.setPrefHeight(52);
+        row.setPadding(new Insets(0, 14, 0, 12));
+        row.setMinHeight(54);
+        row.setPrefHeight(54);
         row.setMaxWidth(Double.MAX_VALUE);
+
+        // Ukos w stylu P3R; klikalność zachowana (transformacja na węźle sceny).
+        PersonaMenuFx.slant(row, -0.10);
+        PersonaMenuFx.SlideControl slide = PersonaMenuFx.hoverSlide(row, 14);
+
+        final int rowIndex = navRows.size();
+        String songId = ready ? entry.context().songId() : null;
+        navRows.add(new RowHandle(row, action, ready, slide, songId, entry.title()));
+
         applyRowStyle(row, ready, false);
-        row.setOnMouseEntered(e -> applyRowStyle(row, ready, true));
-        row.setOnMouseExited(e -> applyRowStyle(row, ready, false));
+        row.setOnMouseEntered(e -> select(rowIndex));
+        row.setOnMouseExited(e -> {
+            if (selectedIndex == rowIndex) deselectCurrent();
+        });
 
         action.setOnAction(e -> {
             if (ctx[0] != null) {
@@ -266,6 +352,8 @@ public final class MenuScreen {
 
     public void reload() {
         songsList.getChildren().clear();
+        navRows.clear();
+        selectedIndex = -1;
         try {
             List<SongEntry> entries = new SongLibrary(songsDir).scan();
             if (entries.isEmpty()) {
@@ -280,7 +368,15 @@ public final class MenuScreen {
             }
             int i = 1;
             for (SongEntry e : entries) {
-                songsList.getChildren().add(buildRow(e, i++));
+                HBox row = buildRow(e, i);
+                // Asymetryczne wcięcie (nachodzące bloki w stylu P3R), przez margines
+                // layoutu — nie koliduje z animacją wysuwania (translateX).
+                VBox.setMargin(row, new Insets(0, 0, 0, (i % 2 == 0) ? 18 : 0));
+                songsList.getChildren().add(row);
+                i++;
+            }
+            if (!navRows.isEmpty()) {
+                select(0);
             }
             int ready = (int) entries.stream().filter(SongEntry::hasBeatmap).count();
             setStatus(entries.size() + " utworów · " + ready + " gotowych");
@@ -320,9 +416,19 @@ public final class MenuScreen {
         badge.setText("Gotowe");
         badge.setStyle(PersonaMenuTheme.badgeReady());
         meta.setText(metaLine(entry, generated));
-        applyRowStyle(row, true, false);
-        row.setOnMouseEntered(e -> applyRowStyle(row, true, true));
-        row.setOnMouseExited(e -> applyRowStyle(row, true, false));
+        for (RowHandle h : navRows) {
+            if (h.node == row) {
+                h.ready = true;
+                h.songId = generated.songId();
+                break;
+            }
+        }
+        boolean selectedNow = selectedIndex >= 0 && selectedIndex < navRows.size()
+                && navRows.get(selectedIndex).node == row;
+        applyRowStyle(row, true, selectedNow);
+        if (selectedNow) {
+            updateStatsPanel(navRows.get(selectedIndex));
+        }
     }
 
     private void generateBeatmap(
@@ -360,6 +466,77 @@ public final class MenuScreen {
 
     private static void applyRowStyle(HBox row, boolean ready, boolean hover) {
         row.setStyle(hover ? PersonaMenuTheme.cardRowHover(ready) : PersonaMenuTheme.cardRow(ready));
+    }
+
+    // ── nawigacja (czysto widokowa) ─────────────────────────────────────────
+
+    private void handleMenuKey(KeyEvent e) {
+        switch (e.getCode()) {
+            case ESCAPE -> onExit.run();
+            case DOWN, RIGHT -> moveSelection(1);
+            case UP, LEFT -> moveSelection(-1);
+            case ENTER, SPACE -> activateSelected();
+            default -> { /* ignorujemy */ }
+        }
+    }
+
+    private void moveSelection(int delta) {
+        if (navRows.isEmpty()) {
+            return;
+        }
+        int next = (selectedIndex < 0)
+                ? (delta > 0 ? 0 : navRows.size() - 1)
+                : Math.floorMod(selectedIndex + delta, navRows.size());
+        select(next);
+    }
+
+    private void select(int index) {
+        if (index < 0 || index >= navRows.size() || index == selectedIndex) {
+            return;
+        }
+        deselectCurrent();
+        selectedIndex = index;
+        RowHandle h = navRows.get(index);
+        applyRowStyle(h.node, h.ready, true);
+        h.slide.set(true);
+        updateStatsPanel(h);
+    }
+
+    private void deselectCurrent() {
+        if (selectedIndex < 0 || selectedIndex >= navRows.size()) {
+            selectedIndex = -1;
+            return;
+        }
+        RowHandle h = navRows.get(selectedIndex);
+        applyRowStyle(h.node, h.ready, false);
+        h.slide.set(false);
+        selectedIndex = -1;
+    }
+
+    private void activateSelected() {
+        if (selectedIndex >= 0 && selectedIndex < navRows.size()) {
+            navRows.get(selectedIndex).action.fire();
+        }
+    }
+
+    /** Widokowy uchwyt wiersza dla nawigacji (węzeł, akcja, stan, animacja, statystyki). */
+    private static final class RowHandle {
+        final HBox node;
+        final Button action;
+        boolean ready;
+        final PersonaMenuFx.SlideControl slide;
+        String songId;
+        final String title;
+
+        RowHandle(HBox node, Button action, boolean ready, PersonaMenuFx.SlideControl slide,
+                  String songId, String title) {
+            this.node = node;
+            this.action = action;
+            this.ready = ready;
+            this.slide = slide;
+            this.songId = songId;
+            this.title = title;
+        }
     }
 
     private static Label ellipsisLabel(String text) {

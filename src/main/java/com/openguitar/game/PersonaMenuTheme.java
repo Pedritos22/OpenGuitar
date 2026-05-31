@@ -1,44 +1,48 @@
 package com.openguitar.game;
 
+import com.openguitar.game.view.PersonaFonts;
 import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
 
 /**
- * Paleta i style CSS menu — minimalistyczny układ z akcentem Persona (granat + cyan).
+ * Paleta i style CSS menu — układ inspirowany Persona 3 Reload
+ * (głęboki granat + elektryczny cyjan, ostre kąty, brak zaokrągleń).
  */
 public final class PersonaMenuTheme {
 
     public static final String BG_DEEP      = "#03060d";
-    public static final String BG_PANEL     = "#0c1830";
-    public static final String BG_ROW       = "#0a1428";
+    public static final String BG_PANEL     = "#0a1d3a";
+    public static final String BG_ROW       = "#081326";
     public static final String BG_ROW_HOVER = "#122040";
     public static final String BORDER       = "#1e4a7a";
     public static final String BORDER_BRIGHT = "#3d9eff";
-    public static final String TEXT         = "#f0f6ff";
-    public static final String TEXT_MUTED   = "#7a9bc4";
-    public static final String TEXT_DIM     = "#4a6488";
+    public static final String TEXT         = "#f2f8ff";
+    public static final String TEXT_MUTED   = "#a9c8e8";
+    public static final String TEXT_DIM     = "#5d7da3";
     public static final String ACCENT       = "#00d4ff";
-    public static final String ACCENT_DEEP  = "#1565c0";
-    public static final String ACCENT_GLOW  = "#4fc3f7";
+    public static final String ACCENT_DEEP  = "#0b3a6b";
+    public static final String ACCENT_GLOW  = "#7df9ff";
     public static final String READY        = "#00e5ff";
     public static final String PENDING      = "#ffb020";
 
+    /** Rodzina krojów UI (Rajdhani) do CSS. */
+    private static final String UI = "'Rajdhani'";
+
     /** Wspólny rozmiar przycisków w wierszu listy i nagłówku. */
-    public static final double BTN_HEIGHT = 32;
-    public static final double BTN_WIDTH_ROW = 84;
+    public static final double BTN_HEIGHT = 34;
+    public static final double BTN_WIDTH_ROW = 90;
 
     private PersonaMenuTheme() {}
 
     public static Font titleFont() {
-        return Font.font(Font.getDefault().getFamily(), FontWeight.BOLD, 24);
+        return PersonaFonts.display(34);
     }
 
     public static Font labelFont(double size) {
-        return Font.font(Font.getDefault().getFamily(), FontWeight.SEMI_BOLD, size);
+        return PersonaFonts.label(size);
     }
 
     public static Font bodyFont(double size) {
-        return Font.font(Font.getDefault().getFamily(), FontWeight.NORMAL, size);
+        return PersonaFonts.body(size);
     }
 
     public static String rootOverlay() {
@@ -53,59 +57,65 @@ public final class PersonaMenuTheme {
     }
 
     public static String divider() {
-        return "-fx-background-color: " + BORDER + ";"
-             + "-fx-min-height: 1;"
-             + "-fx-max-height: 1;"
-             + "-fx-pref-height: 1;";
+        return "-fx-background-color: linear-gradient(to right, " + ACCENT + ", transparent);"
+             + "-fx-min-height: 2;"
+             + "-fx-max-height: 2;"
+             + "-fx-pref-height: 2;";
     }
 
     public static String sectionLabel() {
-        return "-fx-text-fill: " + TEXT_MUTED + ";"
-             + "-fx-font-size: 11px;";
+        return "-fx-text-fill: " + ACCENT + ";"
+             + "-fx-font-family: " + UI + ";"
+             + "-fx-font-weight: bold;"
+             + "-fx-font-size: 12px;";
     }
 
     public static String statusBar() {
-        return "-fx-background-color: rgba(8, 18, 36, 0.85);"
-             + "-fx-border-color: " + BORDER + " transparent transparent transparent;"
+        return "-fx-background-color: rgba(6, 16, 31, 0.85);"
+             + "-fx-border-color: " + ACCENT + " transparent transparent transparent;"
              + "-fx-border-width: 1 0 0 0;"
              + "-fx-padding: 10 0 0 0;";
     }
 
     public static String indexLabel() {
-        return "-fx-text-fill: " + TEXT_DIM + ";"
-             + "-fx-font-size: 12px;";
+        return "-fx-text-fill: " + ACCENT + ";"
+             + "-fx-font-family: " + UI + ";"
+             + "-fx-font-weight: bold;"
+             + "-fx-font-size: 13px;";
     }
 
     public static String statusText() {
         return "-fx-text-fill: " + TEXT_DIM + ";"
-             + "-fx-font-size: 10px;";
+             + "-fx-font-family: " + UI + ";"
+             + "-fx-font-size: 11px;";
     }
 
     public static String cardRow(boolean ready) {
         String stripe = ready ? READY : PENDING;
         return "-fx-background-color: " + BG_ROW + ";"
              + "-fx-border-color: " + BORDER + " " + BORDER + " " + BORDER + " " + stripe + ";"
-             + "-fx-border-width: 1 1 1 2;";
+             + "-fx-border-width: 1 1 1 3;";
     }
 
     public static String cardRowHover(boolean ready) {
         String stripe = ready ? ACCENT : PENDING;
-        return "-fx-background-color: " + BG_ROW_HOVER + ";"
+        return "-fx-background-color: linear-gradient(to right, #122040, #0a1830);"
              + "-fx-border-color: " + BORDER_BRIGHT + " " + BORDER + " " + BORDER + " " + stripe + ";"
-             + "-fx-border-width: 1 1 1 2;";
+             + "-fx-border-width: 1 1 1 4;";
     }
 
     public static String badgeReady() {
-        return badgeBase(READY, "rgba(0, 229, 255, 0.1)");
+        return badgeBase(READY, "rgba(0, 229, 255, 0.12)");
     }
 
     public static String badgePending() {
-        return badgeBase(PENDING, "rgba(255, 176, 32, 0.1)");
+        return badgeBase(PENDING, "rgba(255, 176, 32, 0.12)");
     }
 
     private static String badgeBase(String color, String bg) {
         return "-fx-background-color: " + bg + ";"
              + "-fx-text-fill: " + color + ";"
+             + "-fx-font-family: " + UI + ";"
              + "-fx-padding: 0 8 0 8;"
              + "-fx-font-size: 10px;"
              + "-fx-font-weight: bold;"
@@ -118,13 +128,13 @@ public final class PersonaMenuTheme {
     public static String rowActionPrimary() {
         return rowButtonFilled(
                 "linear-gradient(to bottom, " + ACCENT_GLOW + ", " + ACCENT_DEEP + ")",
-                TEXT, BORDER_BRIGHT);
+                "#03060d", BORDER_BRIGHT);
     }
 
     public static String rowActionWarn() {
         return rowButtonFilled(
                 "linear-gradient(to bottom, #ffc04d, #3d2808)",
-                "#ffe0a0", PENDING);
+                "#1a0f00", PENDING);
     }
 
     public static String toolbarButton() {
@@ -134,7 +144,8 @@ public final class PersonaMenuTheme {
     private static String rowButtonFilled(String background, String fg, String border) {
         return "-fx-background-color: " + background + ";"
              + "-fx-text-fill: " + fg + ";"
-             + "-fx-font-size: 11px;"
+             + "-fx-font-family: " + UI + ";"
+             + "-fx-font-size: 12px;"
              + "-fx-font-weight: bold;"
              + "-fx-padding: 0 14 0 14;"
              + "-fx-background-radius: 0;"
@@ -145,9 +156,10 @@ public final class PersonaMenuTheme {
     }
 
     private static String rowButtonOutline(String fg, String border) {
-        return "-fx-background-color: transparent;"
+        return "-fx-background-color: rgba(0, 212, 255, 0.06);"
              + "-fx-text-fill: " + fg + ";"
-             + "-fx-font-size: 11px;"
+             + "-fx-font-family: " + UI + ";"
+             + "-fx-font-size: 12px;"
              + "-fx-font-weight: bold;"
              + "-fx-padding: 0 14 0 14;"
              + "-fx-background-radius: 0;"

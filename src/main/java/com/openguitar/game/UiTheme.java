@@ -1,60 +1,58 @@
 package com.openguitar.game;
 
+import com.openguitar.game.view.PersonaFonts;
+import com.openguitar.game.view.PersonaPalette;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
 
 /**
- * Wspólna paleta i style CSS dla menu oraz ekranu gry.
+ * Wspólna paleta i style w duchu Persona 3 Reload (Deep Blue / Aqua / White / Black).
+ * Fonty delegowane do {@link PersonaFonts}, kolory do {@link PersonaPalette}.
+ *
+ * <p>Sygnatury metod pozostają zgodne z poprzednią wersją — to wyłącznie rework
+ * warstwy widoku, logika gry korzystająca z tych stałych działa bez zmian.</p>
  */
 public final class UiTheme {
 
-    public static final String BG          = "#06080f";
-    public static final String BG_ELEVATED = "#0f1522";
-    public static final String BG_CARD     = "#141c2b";
-    public static final String BG_CARD_HOVER = "#1a2436";
-    public static final String BORDER      = "#243044";
-    public static final String TEXT        = "#f1f5f9";
-    public static final String TEXT_MUTED   = "#94a3b8";
-    public static final String TEXT_DIM     = "#64748b";
-    public static final String ACCENT      = "#6366f1";
-    public static final String ACCENT_SOFT = "#818cf8";
-
-    private static final String[] LANE_HEX = {
-            "#34d399", "#f87171", "#fbbf24", "#60a5fa"
-    };
-
-    private static final Color[] LANE_COLORS = {
-            Color.web(LANE_HEX[0]),
-            Color.web(LANE_HEX[1]),
-            Color.web(LANE_HEX[2]),
-            Color.web(LANE_HEX[3])
-    };
+    public static final String BG            = "#03060d";
+    public static final String BG_ELEVATED   = "#0a1d3a";
+    public static final String BG_CARD       = "#0a1428";
+    public static final String BG_CARD_HOVER = "#122040";
+    public static final String BORDER        = "#1e4a7a";
+    public static final String TEXT          = "#f2f8ff";
+    public static final String TEXT_MUTED    = "#a9c8e8";
+    public static final String TEXT_DIM      = "#5d7da3";
+    public static final String ACCENT        = "#00d4ff";
+    public static final String ACCENT_SOFT   = "#7df9ff";
 
     private UiTheme() {}
 
     public static Color laneColor(int lane) {
-        return LANE_COLORS[Math.floorMod(lane, LANE_COLORS.length)];
+        return PersonaPalette.lane(lane);
     }
 
     public static String laneHex(int lane) {
-        return LANE_HEX[Math.floorMod(lane, LANE_HEX.length)];
+        Color c = PersonaPalette.lane(lane);
+        return String.format("#%02x%02x%02x",
+                (int) Math.round(c.getRed() * 255),
+                (int) Math.round(c.getGreen() * 255),
+                (int) Math.round(c.getBlue() * 255));
     }
 
-    public static Color canvasBgTop()    { return Color.web("#0c1220"); }
-    public static Color canvasBgBottom() { return Color.web("#05070d"); }
-    public static Color canvasVignette() { return Color.color(0, 0, 0, 0.45); }
+    public static Color canvasBgTop()    { return Color.web("#081326"); }
+    public static Color canvasBgBottom() { return Color.web("#03060d"); }
+    public static Color canvasVignette() { return Color.color(0, 0, 0, 0.5); }
 
     public static Font font(double size) {
-        return Font.font(Font.getDefault().getFamily(), size);
+        return PersonaFonts.body(size);
     }
 
     public static Font fontBold(double size) {
-        return Font.font(Font.getDefault().getFamily(), FontWeight.BOLD, size);
+        return PersonaFonts.heading(size);
     }
 
     public static Font fontSemiBold(double size) {
-        return Font.font(Font.getDefault().getFamily(), FontWeight.SEMI_BOLD, size);
+        return PersonaFonts.label(size);
     }
 
     public static String rootStyle() {
@@ -69,11 +67,11 @@ public final class UiTheme {
     }
 
     public static String primaryButton() {
-        return baseButton(ACCENT, "#ffffff", "bold");
+        return baseButton(ACCENT, "#03060d", "bold");
     }
 
     public static String warnButton() {
-        return baseButton("#d97706", "#ffffff", "bold");
+        return baseButton("#ffb020", "#03060d", "bold");
     }
 
     public static String secondaryButton() {
@@ -86,44 +84,44 @@ public final class UiTheme {
              + "-fx-font-weight: " + weight + ";"
              + "-fx-padding: 9 20 9 20;"
              + "-fx-cursor: hand;"
-             + "-fx-background-radius: 8;"
+             + "-fx-background-radius: 2;"
              + "-fx-border-color: " + BORDER + ";"
-             + "-fx-border-radius: 8;"
+             + "-fx-border-radius: 2;"
              + "-fx-border-width: 1;";
     }
 
     public static String cardRow(boolean ready) {
-        String accent = ready ? "#22c55e" : "#f59e0b";
+        String accent = ready ? ACCENT : "#ffb020";
         return "-fx-background-color: " + BG_CARD + ";"
-             + "-fx-background-radius: 10;"
+             + "-fx-background-radius: 2;"
              + "-fx-border-color: " + BORDER + " " + BORDER + " " + BORDER + " " + accent + ";"
              + "-fx-border-width: 1 1 1 3;"
-             + "-fx-border-radius: 10;";
+             + "-fx-border-radius: 2;";
     }
 
     public static String cardRowHover(boolean ready) {
-        String accent = ready ? "#34d399" : "#fbbf24";
+        String accent = ready ? ACCENT_SOFT : "#ffd166";
         return "-fx-background-color: " + BG_CARD_HOVER + ";"
-             + "-fx-background-radius: 10;"
+             + "-fx-background-radius: 2;"
              + "-fx-border-color: " + ACCENT_SOFT + " " + BORDER + " " + BORDER + " " + accent + ";"
              + "-fx-border-width: 1 1 1 3;"
-             + "-fx-border-radius: 10;";
+             + "-fx-border-radius: 2;";
     }
 
     public static String badgeReady() {
-        return "-fx-background-color: #052e1a;"
-             + "-fx-text-fill: #6ee7b7;"
+        return "-fx-background-color: rgba(0, 212, 255, 0.12);"
+             + "-fx-text-fill: #7df9ff;"
              + "-fx-padding: 4 10 4 10;"
-             + "-fx-background-radius: 6;"
+             + "-fx-background-radius: 2;"
              + "-fx-font-weight: bold;"
              + "-fx-font-size: 10px;";
     }
 
     public static String badgePending() {
-        return "-fx-background-color: #3b2206;"
-             + "-fx-text-fill: #fcd34d;"
+        return "-fx-background-color: rgba(255, 176, 32, 0.12);"
+             + "-fx-text-fill: #ffd166;"
              + "-fx-padding: 4 10 4 10;"
-             + "-fx-background-radius: 6;"
+             + "-fx-background-radius: 2;"
              + "-fx-font-weight: bold;"
              + "-fx-font-size: 10px;";
     }
