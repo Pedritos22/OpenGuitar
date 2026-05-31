@@ -300,15 +300,18 @@ public final class GameScreen {
             return;
         }
 
+        // Delta między klatkami (z zegara ściennego). Aktualizujemy zawsze — także w
+        // pauzie — aby po wznowieniu delta nie zawierała całego czasu pauzy.
+        double frameDtMs = (lastFrameNanos < 0)
+                ? 0
+                : (nowNanos - lastFrameNanos) / 1_000_000.0;
+        frameDtMs = Math.min(frameDtMs, 100.0); // zabezpieczenie po zacięciu/minimalizacji
+        lastFrameNanos = nowNanos;
+
         // W pauzie zamrażamy stan gry: nie przesuwamy czasu, nie naliczamy MISS-ów,
         // nie wygaszamy popupów. Rysujemy wciąż scenę + nakładkę pauzy.
         if (!paused) {
-            // Audio jest źródłem prawdy o czasie. Jeśli go brakuje (tryb demo / błąd
-            // ładowania), używamy upływu czasu od startu pętli, żeby gra dalej działała
-            // dla celów demonstracyjnych.
-            currentTimeMs = (player != null)
-                    ? player.getCurrentTime().toMillis()
-                    : (nowNanos - loopStartNanos) / 1_000_000.0;
+            advanceClock(frameDtMs);
 
             markPassedNotesAsMisses();
             popups.removeIf(p -> p.isExpired(nowNanos));
@@ -318,6 +321,45 @@ public final class GameScreen {
 
         if (!paused && currentTimeMs >= songEndTimeMs) {
             finishIfNotYet();
+        }
+    }
+
+    /**
+     * Posuwa zegar gry o deltę zegara ściennego i delikatnie koryguje go do audio.
+     * MediaPlayer.getCurrentTime() bywa gruboziarnisty (zwłaszcza dla WAV), więc
+     * interpolujemy między jego próbkami zamiast czytać go wprost co klatkę.
+     */
+    private void advanceClock(double frameDtMs) {
+        if (player == null) {
+            // tryb bez audio: czysty zegar ścienny od startu pętli
+            currentTimeMs = (lastFrameNanos - loopStartNanos) / 1_000_000.0;
+            return;
+        }
+
+        double raw = player.getCurrentTime().toMillis();
+
+        // Dopóki audio realnie nie ruszyło (asynchroniczny start/buforowanie, zwłaszcza
+        // przy MP3), NIE wyprzedzamy go zegarem ściennym — inaczej w chwili faktycznego
+        // startu dryf urósłby i twardy sync cofnąłby nuty („przeskok miejsc”).
+        boolean playing = player.getStatus() == MediaPlayer.Status.PLAYING;
+        if (!playing || (raw <= 0 && currentTimeMs <= 0)) {
+            currentTimeMs = raw;
+            lastRawAudioMs = raw;
+            return;
+        }
+
+        if (raw != lastRawAudioMs) {
+            // świeża próbka z mediów — koryguj dryf do dźwięku
+            double drift = raw - currentTimeMs;
+            if (Math.abs(drift) > 150) {
+                currentTimeMs = raw; // seek / duża luka / stall — twardy sync
+            } else {
+                currentTimeMs += frameDtMs + drift * 0.15; // płynna korekta
+            }
+            lastRawAudioMs = raw;
+        } else {
+            // zegar mediów stoi między próbkami — interpoluj po zegarze ściennym
+            currentTimeMs += frameDtMs;
         }
     }
 
