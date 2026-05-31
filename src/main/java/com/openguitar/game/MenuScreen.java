@@ -15,6 +15,7 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -65,6 +66,14 @@ public final class MenuScreen {
 
     /** Nakładka z historią podejść (null = zamknięta). */
     private StackPane historyOverlay;
+
+    /** Nakładka ustawień (null = zamknięta) + stan przechwytywania klawisza. */
+    private StackPane settingsOverlay;
+    private final Button[] keyCaps = new Button[GameScreen.LANES];
+    private Label countdownValue;
+    private Button popupsToggle;
+    /** Ścieżka oczekująca na przypisanie klawisza (-1 = brak rebindingu). */
+    private int rebindingLane = -1;
 
     /** Uchwyty wierszy do nawigacji klawiaturą (czysto widokowe). */
     private final List<RowHandle> navRows = new ArrayList<>();
@@ -221,6 +230,8 @@ public final class MenuScreen {
     }
 
     private VBox buildFooter() {
+        Button settings = gearButton();
+        settings.setOnAction(e -> openSettings());
         Button history = toolbarButton("Historia");
         history.setOnAction(e -> openHistoryForSelection());
         Button refresh = toolbarButton("Odśwież");
@@ -228,7 +239,7 @@ public final class MenuScreen {
         Button exit = toolbarButton("Wyjście");
         exit.setOnAction(e -> onExit.run());
 
-        HBox actions = new HBox(8, history, refresh, exit);
+        HBox actions = new HBox(8, settings, history, refresh, exit);
         actions.setAlignment(Pos.CENTER_RIGHT);
         actions.setMinWidth(Region.USE_PREF_SIZE);
         HBox.setHgrow(actions, Priority.NEVER);
@@ -378,6 +389,16 @@ public final class MenuScreen {
         b.setMinHeight(PersonaMenuTheme.BTN_HEIGHT);
         b.setPrefHeight(PersonaMenuTheme.BTN_HEIGHT);
         b.setMaxHeight(PersonaMenuTheme.BTN_HEIGHT);
+        return b;
+    }
+
+    /** Przycisk z ikoną zębatki (⚙) otwierający ustawienia. */
+    private static Button gearButton() {
+        Button b = new Button("\u2699");
+        b.setStyle(PersonaMenuTheme.gearButton());
+        b.setMinSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
+        b.setPrefSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
+        b.setMaxSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
         return b;
     }
 
@@ -554,9 +575,14 @@ public final class MenuScreen {
     // ── nawigacja (czysto widokowa) ─────────────────────────────────────────
 
     private void handleMenuKey(KeyEvent e) {
+        // Gdy otwarte są ustawienia, klawisze obsługuje wyłącznie nakładka ustawień.
+        if (settingsOverlay != null) {
+            handleSettingsKey(e);
+            return;
+        }
         // Gdy otwarta jest historia, klawisze sterują tylko nią.
         if (historyOverlay != null) {
-            if (e.getCode() == javafx.scene.input.KeyCode.ESCAPE) {
+            if (e.getCode() == KeyCode.ESCAPE) {
                 closeHistory();
             }
             e.consume();
@@ -733,6 +759,216 @@ public final class MenuScreen {
         row.setPadding(new Insets(8, 12, 8, 12));
         row.setStyle(PersonaMenuTheme.historyRow(toHex(r.color())));
         return row;
+    }
+
+    // ── ustawienia (nakładka) ────────────────────────────────────────────────
+
+    private void openSettings() {
+        if (settingsOverlay != null) {
+            return;
+        }
+        rebindingLane = -1;
+        settingsOverlay = buildSettingsOverlay();
+        root.getChildren().add(settingsOverlay);
+    }
+
+    private void closeSettings() {
+        if (settingsOverlay != null) {
+            GameSettings.get().save();
+            root.getChildren().remove(settingsOverlay);
+            settingsOverlay = null;
+            rebindingLane = -1;
+        }
+    }
+
+    /** Podczas rebindingu pierwszy klawisz przypisujemy do ścieżki; inaczej ESC zamyka. */
+    private void handleSettingsKey(KeyEvent e) {
+        if (rebindingLane >= 0) {
+            if (e.getCode() != KeyCode.ESCAPE) {
+                GameSettings.get().setLaneKey(rebindingLane, e.getCode());
+            }
+            rebindingLane = -1;
+            refreshKeyCaps();
+            e.consume();
+            return;
+        }
+        if (e.getCode() == KeyCode.ESCAPE) {
+            closeSettings();
+        }
+        e.consume();
+    }
+
+    private StackPane buildSettingsOverlay() {
+        Label heading = new Label("USTAWIENIA");
+        heading.setFont(PersonaFonts.display(34));
+        heading.setTextFill(Color.web(PersonaMenuTheme.ACCENT));
+        PersonaMenuFx.slant(heading, -0.16);
+
+        Label sub = new Label("Sterowanie i rozgrywka");
+        sub.setFont(PersonaFonts.label(13));
+        sub.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
+
+        VBox head = new VBox(-2, heading, sub);
+        head.setAlignment(Pos.CENTER_LEFT);
+
+        VBox body = new VBox(10,
+                sectionCaption("STEROWANIE — KLAWISZE ŚCIEŻEK"));
+        for (int lane = 0; lane < GameScreen.LANES; lane++) {
+            body.getChildren().add(keyBindingRow(lane));
+        }
+        body.getChildren().addAll(
+                sectionCaption("ROZGRYWKA"),
+                countdownRow(),
+                popupsRow());
+
+        Label hint = new Label("Kliknij klawisz, aby zmienić · ESC — zapisz i zamknij");
+        hint.setFont(PersonaFonts.body(12));
+        hint.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
+
+        VBox panel = new VBox(14, head, body, hint);
+        panel.setPadding(new Insets(20, 22, 16, 22));
+        panel.setMaxWidth(WIDTH - 56);
+        panel.setMaxHeight(HEIGHT - 90);
+        panel.setStyle(PersonaMenuTheme.settingsPanel());
+
+        StackPane overlay = new StackPane(panel);
+        StackPane.setAlignment(panel, Pos.CENTER);
+        overlay.setStyle("-fx-background-color: rgba(2, 6, 14, 0.78);");
+        overlay.setOnMouseClicked(e -> closeSettings());
+        panel.setOnMouseClicked(javafx.event.Event::consume);
+        return overlay;
+    }
+
+    private Label sectionCaption(String text) {
+        Label l = new Label(text);
+        l.setStyle(PersonaMenuTheme.sectionLabel());
+        l.setPadding(new Insets(6, 0, 0, 2));
+        return l;
+    }
+
+    private HBox keyBindingRow(int lane) {
+        Region dot = new Region();
+        dot.setMinSize(12, 12);
+        dot.setPrefSize(12, 12);
+        dot.setMaxSize(12, 12);
+        dot.setStyle("-fx-background-color: " + toHex(com.openguitar.game.view.PersonaPalette.lane(lane)) + ";");
+
+        Label name = new Label("Ścieżka " + (lane + 1));
+        name.setFont(PersonaMenuTheme.labelFont(13));
+        name.setTextFill(Color.web(PersonaMenuTheme.TEXT));
+
+        HBox left = new HBox(10, dot, name);
+        left.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(left, Priority.ALWAYS);
+        left.setMinWidth(0);
+
+        Button cap = new Button(GameSettings.get().laneKey(lane).getName());
+        cap.setStyle(PersonaMenuTheme.keyCap(false));
+        cap.setMinSize(64, PersonaMenuTheme.BTN_HEIGHT);
+        cap.setPrefSize(64, PersonaMenuTheme.BTN_HEIGHT);
+        cap.setMaxSize(64, PersonaMenuTheme.BTN_HEIGHT);
+        final int laneIdx = lane;
+        cap.setOnAction(e -> startRebind(laneIdx));
+        keyCaps[lane] = cap;
+
+        HBox row = new HBox(12, left, cap);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setStyle(PersonaMenuTheme.settingRow());
+        return row;
+    }
+
+    private void startRebind(int lane) {
+        rebindingLane = lane;
+        refreshKeyCaps();
+    }
+
+    private void refreshKeyCaps() {
+        for (int i = 0; i < keyCaps.length; i++) {
+            Button cap = keyCaps[i];
+            if (cap == null) {
+                continue;
+            }
+            boolean listening = (i == rebindingLane);
+            cap.setText(listening ? "..." : GameSettings.get().laneKey(i).getName());
+            cap.setStyle(PersonaMenuTheme.keyCap(listening));
+        }
+    }
+
+    private HBox countdownRow() {
+        Label name = new Label("Odliczanie przed startem");
+        name.setFont(PersonaMenuTheme.labelFont(13));
+        name.setTextFill(Color.web(PersonaMenuTheme.TEXT));
+        HBox.setHgrow(name, Priority.ALWAYS);
+        name.setMinWidth(0);
+        name.setMaxWidth(Double.MAX_VALUE);
+
+        countdownValue = new Label();
+        countdownValue.setFont(PersonaMenuTheme.labelFont(13));
+        countdownValue.setTextFill(Color.web(PersonaMenuTheme.ACCENT_GLOW));
+        countdownValue.setMinWidth(54);
+        countdownValue.setAlignment(Pos.CENTER);
+        updateCountdownValue();
+
+        Button minus = stepper("\u2212");
+        minus.setOnAction(e -> changeCountdown(-1));
+        Button plus = stepper("+");
+        plus.setOnAction(e -> changeCountdown(1));
+
+        HBox controls = new HBox(6, minus, countdownValue, plus);
+        controls.setAlignment(Pos.CENTER_RIGHT);
+
+        HBox row = new HBox(12, name, controls);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setStyle(PersonaMenuTheme.settingRow());
+        return row;
+    }
+
+    private void changeCountdown(int delta) {
+        GameSettings s = GameSettings.get();
+        s.setCountdownSeconds(s.countdownSeconds() + delta);
+        updateCountdownValue();
+    }
+
+    private void updateCountdownValue() {
+        int sec = GameSettings.get().countdownSeconds();
+        countdownValue.setText(sec <= 0 ? "Wył." : sec + " s");
+    }
+
+    private HBox popupsRow() {
+        Label name = new Label("Komunikaty trafień");
+        name.setFont(PersonaMenuTheme.labelFont(13));
+        name.setTextFill(Color.web(PersonaMenuTheme.TEXT));
+        HBox.setHgrow(name, Priority.ALWAYS);
+        name.setMinWidth(0);
+        name.setMaxWidth(Double.MAX_VALUE);
+
+        popupsToggle = stepper(null);
+        popupsToggle.setMinWidth(64);
+        popupsToggle.setPrefWidth(64);
+        updatePopupsToggle();
+        popupsToggle.setOnAction(e -> {
+            GameSettings s = GameSettings.get();
+            s.setShowHitPopups(!s.showHitPopups());
+            updatePopupsToggle();
+        });
+
+        HBox row = new HBox(12, name, popupsToggle);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setStyle(PersonaMenuTheme.settingRow());
+        return row;
+    }
+
+    private void updatePopupsToggle() {
+        popupsToggle.setText(GameSettings.get().showHitPopups() ? "Wł." : "Wył.");
+    }
+
+    private static Button stepper(String text) {
+        Button b = new Button(text == null ? "" : text);
+        b.setStyle(PersonaMenuTheme.stepperButton());
+        b.setMinSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
+        b.setPrefHeight(PersonaMenuTheme.BTN_HEIGHT);
+        b.setMaxHeight(PersonaMenuTheme.BTN_HEIGHT);
+        return b;
     }
 
     private static String toHex(Color c) {

@@ -20,6 +20,8 @@ songs/*.WAV
 songs/*.AIFF
 songs/*.FLAC
 
-# Lokalne statystyki gracza (generowane w runtime) - nie wersjonujemy.
+# Lokalne statystyki gracza (SQLite, generowane w runtime) - nie wersjonujemy.
 stats.db
-stats.json
+
+# Lokalne ustawienia użytkownika (klawisze, odliczanie) - generowane w runtime.
+settings.properties

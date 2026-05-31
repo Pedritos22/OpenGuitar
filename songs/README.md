@@ -1,13 +1,13 @@
 # Folder `songs/`
 
-Tutaj wrzucasz pliki audio (`.mp3`, `.wav`, ewentualnie `.aiff`).
+Tutaj wrzucasz pliki audio (`.mp3`, `.wav`, `.aiff`).
 
 Po wygenerowaniu beatmapy obok każdego utworu pojawi się plik `.json`:
 
 ```
 songs/
-├── mojautwor.mp3        # twój plik audio (NIE jest commitowany)
-├── mojautwor.json       # wygenerowana beatmapa (commitowana, jeśli chcesz)
+├── mojautwor.mp3        # twój plik audio (NIE commitowany)
+├── mojautwor.json       # wygenerowana beatmapa (można commitować)
 ├── inna-piosenka.wav
 └── inna-piosenka.json
 ```
@@ -17,9 +17,10 @@ songs/
 Z roota repozytorium:
 
 ```bash
-./play.sh songs/mojautwor.mp3        # parsuje + uruchamia grę
-./play.sh songs/mojautwor.json       # uruchamia grę (beatmapa już istnieje)
-./play.sh --list                     # listuje dostępne utwory
+./play.sh                    # menu — wybierz utwór i kliknij Graj
+./play.sh songs/utwor.mp3    # parsuje + uruchamia grę
+./play.sh songs/utwor.json   # gra z gotową mapą
+./play.sh --list             # lista plików audio
 ```
 
-Patrz `README.md` w roocie po szczegóły.
+Więcej informacji: [README.md](../README.md) i [DOCUMENTATION.md](../DOCUMENTATION.md).
