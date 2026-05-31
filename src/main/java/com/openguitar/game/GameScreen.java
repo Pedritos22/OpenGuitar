@@ -2,7 +2,13 @@ package com.openguitar.game;
 
 import com.openguitar.beatmap.Note;
 import com.openguitar.beatmap.SongContext;
+import com.openguitar.game.view.CrystalNote;
+import com.openguitar.game.view.FullscreenScaler;
+import com.openguitar.game.view.PersonaFonts;
+import com.openguitar.game.view.PersonaPalette;
+import com.openguitar.game.view.PersonaText;
 import javafx.animation.AnimationTimer;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -15,8 +21,6 @@ import javafx.scene.paint.CycleMethod;
 import javafx.scene.paint.LinearGradient;
 import javafx.scene.paint.RadialGradient;
 import javafx.scene.paint.Stop;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
 import javafx.scene.text.TextAlignment;
 
 import java.net.URI;
@@ -87,9 +91,30 @@ public final class GameScreen {
     /** Czas po ostatniej nucie, po którym uznajemy utwór za skończony (ms). */
     private static final int END_GRACE_PERIOD_MS = 2_000;
 
+    // ---------- cache zasobów rysujących (zero alokacji per-klatkę) ----------
+
+    private static final LinearGradient BG_GRADIENT = new LinearGradient(
+            0, 0, 0, CANVAS_HEIGHT, false, CycleMethod.NO_CYCLE,
+            new Stop(0, Color.web("#081326")),
+            new Stop(0.5, Color.web("#050b16")),
+            new Stop(1, Color.web("#03060d")));
+
+    private static final RadialGradient HORIZON_GLOW = new RadialGradient(
+            0, 0, VANISH_CENTER_X, VANISH_Y - 10, 220, false, CycleMethod.NO_CYCLE,
+            new Stop(0, Color.color(0.0, 0.55, 0.95, 0.20)),
+            new Stop(1, Color.color(0, 0, 0, 0)));
+
+    /** Czas trwania „pop” licznika HUD (skalowanie po zmianie wartości). */
+    private static final long HUD_POP_NANOS = 220_000_000L;
+
+    /** Opcje ekranu pauzy. */
+    private static final String[] PAUSE_OPTIONS = {"WZNÓW", "WYJDŹ DO MENU"};
+
     // ---------- stan ----------
     private final SongContext context;
     private final Consumer<GameResult> onFinished;
+    /** Powrót do menu bez ekranu wyniku (wyjście z pauzy). */
+    private final Runnable onQuit;
 
     private final Canvas canvas;
     private final Scene scene;
@@ -106,16 +131,30 @@ public final class GameScreen {
     private MediaPlayer player;
     private AnimationTimer loop;
     private boolean finished = false;
+    private boolean paused = false;
+    private int pauseSelection = 0;
+    /** Moment wejścia w pauzę (nanos) — do korekty czasu w trybie bez audio. */
+    private long pauseStartNanos = 0;
     private double currentTimeMs = 0.0;
     private final int songEndTimeMs;
     /** Punkt startu w nanosekundach - fallback gdy audio nie jest załadowane. */
     private long loopStartNanos = -1;
 
+    // Stan widoku HUD: ostatnio pokazane wartości + moment ich zmiany (efekt „pop”).
+    // To wyłącznie pamięć podręczna renderera — nie wpływa na logikę punktacji.
+    private int shownScore = -1;
+    private int shownCombo = -1;
+    private int shownMult = -1;
+    private long scorePopNanos = -HUD_POP_NANOS;
+    private long comboPopNanos = -HUD_POP_NANOS;
+    private long multPopNanos = -HUD_POP_NANOS;
+
     // ---------- konstrukcja ----------
 
-    public GameScreen(SongContext context, Consumer<GameResult> onFinished) {
+    public GameScreen(SongContext context, Consumer<GameResult> onFinished, Runnable onQuit) {
         this.context = context;
         this.onFinished = onFinished;
+        this.onQuit = onQuit;
 
         this.runtimeNotes = new ArrayList<>(context.notes().size());
         for (Note n : context.notes()) {
@@ -131,7 +170,8 @@ public final class GameScreen {
         this.canvas = new Canvas(CANVAS_WIDTH, CANVAS_HEIGHT);
         StackPane root = new StackPane(canvas);
         root.setStyle(UiTheme.rootStyle());
-        this.scene = new Scene(root, CANVAS_WIDTH, CANVAS_HEIGHT);
+        Parent scaled = FullscreenScaler.wrap(root, CANVAS_WIDTH, CANVAS_HEIGHT);
+        this.scene = new Scene(scaled, CANVAS_WIDTH, CANVAS_HEIGHT);
 
         this.scene.setOnKeyPressed(e -> handleKeyPressed(e.getCode()));
         this.scene.setOnKeyReleased(e -> handleKeyReleased(e.getCode()));
@@ -179,10 +219,14 @@ public final class GameScreen {
 
     /** Zatrzymuje rozgrywkę i zwalnia zasoby (audio, pętla). Idempotentne. */
     public void stop() {
-        if (loop != null) loop.stop();
+        if (loop != null) {
+            loop.stop();
+            loop = null;
+        }
         if (player != null) {
             player.stop();
             player.dispose();
+            player = null;
         }
     }
 
@@ -191,19 +235,23 @@ public final class GameScreen {
     private void tick(long nowNanos) {
         if (finished) return;
 
-        // Audio jest źródłem prawdy o czasie. Jeśli go brakuje (tryb demo / błąd
-        // ładowania), używamy upływu czasu od startu pętli, żeby gra dalej działała
-        // dla celów demonstracyjnych.
-        currentTimeMs = (player != null)
-                ? player.getCurrentTime().toMillis()
-                : (nowNanos - loopStartNanos) / 1_000_000.0;
+        // W pauzie zamrażamy stan gry: nie przesuwamy czasu, nie naliczamy MISS-ów,
+        // nie wygaszamy popupów. Rysujemy wciąż scenę + nakładkę pauzy.
+        if (!paused) {
+            // Audio jest źródłem prawdy o czasie. Jeśli go brakuje (tryb demo / błąd
+            // ładowania), używamy upływu czasu od startu pętli, żeby gra dalej działała
+            // dla celów demonstracyjnych.
+            currentTimeMs = (player != null)
+                    ? player.getCurrentTime().toMillis()
+                    : (nowNanos - loopStartNanos) / 1_000_000.0;
 
-        markPassedNotesAsMisses();
-        popups.removeIf(p -> p.isExpired(nowNanos));
+            markPassedNotesAsMisses();
+            popups.removeIf(p -> p.isExpired(nowNanos));
+        }
 
         render(nowNanos);
 
-        if (currentTimeMs >= songEndTimeMs) {
+        if (!paused && currentTimeMs >= songEndTimeMs) {
             finishIfNotYet();
         }
     }
@@ -230,8 +278,12 @@ public final class GameScreen {
     // ---------- input ----------
 
     private void handleKeyPressed(KeyCode key) {
+        if (paused) {
+            handlePauseKey(key);
+            return;
+        }
         if (key == KeyCode.ESCAPE) {
-            finishIfNotYet();
+            pauseGame();
             return;
         }
         int lane = laneFor(key);
@@ -244,6 +296,61 @@ public final class GameScreen {
     private void handleKeyReleased(KeyCode key) {
         int lane = laneFor(key);
         if (lane >= 0) laneHeld[lane] = false;
+    }
+
+    // ---------- pauza ----------
+
+    private void handlePauseKey(KeyCode key) {
+        switch (key) {
+            case ESCAPE -> resumeGame();
+            case UP, LEFT -> pauseSelection = Math.floorMod(pauseSelection - 1, PAUSE_OPTIONS.length);
+            case DOWN, RIGHT -> pauseSelection = Math.floorMod(pauseSelection + 1, PAUSE_OPTIONS.length);
+            case ENTER, SPACE -> activatePauseOption();
+            default -> { /* ignorujemy */ }
+        }
+    }
+
+    private void activatePauseOption() {
+        if (pauseSelection == 0) {
+            resumeGame();
+        } else {
+            quitToMenu();
+        }
+    }
+
+    private void pauseGame() {
+        if (paused || finished) return;
+        paused = true;
+        pauseSelection = 0;
+        pauseStartNanos = System.nanoTime();
+        if (player != null) {
+            player.pause();
+        }
+    }
+
+    private void resumeGame() {
+        if (!paused) return;
+        paused = false;
+        if (player != null) {
+            player.play();
+        } else {
+            // tryb bez audio: przesuwamy punkt startu o długość pauzy, by czas nie skoczył
+            loopStartNanos += System.nanoTime() - pauseStartNanos;
+        }
+        for (int i = 0; i < LANES; i++) {
+            laneHeld[i] = false;
+        }
+    }
+
+    /** Wyjście z pauzy prosto do menu (bez ekranu wyniku). */
+    private void quitToMenu() {
+        if (finished) return;
+        finished = true;
+        paused = false;
+        stop();
+        if (onQuit != null) {
+            onQuit.run();
+        }
     }
 
     private static int laneFor(KeyCode key) {
@@ -368,8 +475,74 @@ public final class GameScreen {
         drawLanes(g, nowNanos);
         drawHitLine(g);
         drawNotes(g);
-        drawHud(g);
+        drawHud(g, nowNanos);
         drawPopups(g, nowNanos);
+
+        if (paused) {
+            drawPauseMenu(g, nowNanos);
+        }
+    }
+
+    /** Ekran pauzy w stylu Persona 3 Reload — przyciemnienie + ukośne opcje. */
+    private void drawPauseMenu(GraphicsContext g, long nowNanos) {
+        g.setFill(PersonaPalette.alpha(PersonaPalette.BLACK, 0.74));
+        g.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // Ukośny pas akcentowy za tytułem
+        double bandY = CANVAS_HEIGHT * 0.26;
+        g.setFill(PersonaPalette.alpha(PersonaPalette.DEEP_BLUE, 0.92));
+        g.fillPolygon(
+                new double[]{0, CANVAS_WIDTH, CANVAS_WIDTH, 0},
+                new double[]{bandY - 36, bandY - 64, bandY + 64, bandY + 92},
+                4);
+        g.setStroke(PersonaPalette.AQUA_BRIGHT);
+        g.setLineWidth(2);
+        g.strokeLine(0, bandY - 64, CANVAS_WIDTH, bandY - 64 + (92 - 36));
+        g.strokeLine(0, bandY + 92, CANVAS_WIDTH, bandY + 92 - (92 - 36));
+
+        PersonaText.draw(g, "PAUZA", CANVAS_WIDTH / 2.0, bandY + 22,
+                PersonaFonts.display(64), PersonaPalette.WHITE,
+                PersonaPalette.BLACK, 4, PersonaPalette.alpha(PersonaPalette.AQUA, 0.55),
+                PersonaText.SLANT, TextAlignment.CENTER);
+
+        // Opcje
+        double startY = CANVAS_HEIGHT * 0.52;
+        double pulse = 0.5 + 0.5 * Math.sin(nowNanos / 180_000_000.0);
+        for (int i = 0; i < PAUSE_OPTIONS.length; i++) {
+            boolean sel = i == pauseSelection;
+            double cx = CANVAS_WIDTH / 2.0;
+            double y = startY + i * 70;
+            double slideX = sel ? 16 : 0;
+
+            if (sel) {
+                double w = 320;
+                double h = 50;
+                double s = 0.32 * h;
+                double left = cx - w / 2 + slideX;
+                g.setFill(PersonaPalette.alpha(PersonaPalette.AQUA, 0.16 + 0.10 * pulse));
+                g.fillPolygon(
+                        new double[]{left + s, left + w + s, left + w, left},
+                        new double[]{y - h / 2, y - h / 2, y + h / 2, y + h / 2},
+                        4);
+                g.setStroke(PersonaPalette.AQUA_BRIGHT);
+                g.setLineWidth(2.5);
+                g.strokePolygon(
+                        new double[]{left + s, left + w + s, left + w, left},
+                        new double[]{y - h / 2, y - h / 2, y + h / 2, y + h / 2},
+                        4);
+            }
+
+            Color fill = sel ? PersonaPalette.WHITE : PersonaPalette.WHITE_DIM;
+            PersonaText.draw(g, PAUSE_OPTIONS[i], cx + slideX, y + 11,
+                    PersonaFonts.heading(sel ? 32 : 27), fill,
+                    PersonaPalette.BLACK, 3,
+                    sel ? PersonaPalette.alpha(PersonaPalette.AQUA, 0.5) : null,
+                    PersonaText.SLANT, TextAlignment.CENTER);
+        }
+
+        PersonaText.plain(g, "↑/↓  wybór      ENTER  zatwierdź      ESC  wznów",
+                CANVAS_WIDTH / 2.0, CANVAS_HEIGHT * 0.52 + PAUSE_OPTIONS.length * 70 + 24,
+                PersonaFonts.body(13), PersonaPalette.MUTED, TextAlignment.CENTER);
     }
 
     private void drawPopups(GraphicsContext g, long nowNanos) {
@@ -379,29 +552,28 @@ public final class GameScreen {
     }
 
     private void drawBackground(GraphicsContext g) {
-        LinearGradient bg = new LinearGradient(
-                0, 0, 0, CANVAS_HEIGHT, false, CycleMethod.NO_CYCLE,
-                new Stop(0, UiTheme.canvasBgTop()),
-                new Stop(0.5, Color.web("#080d18")),
-                new Stop(1, UiTheme.canvasBgBottom()));
-        g.setFill(bg);
+        g.setFill(BG_GRADIENT);
         g.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        RadialGradient horizon = new RadialGradient(
-                0, 0, VANISH_CENTER_X, VANISH_Y - 10, 200, false, CycleMethod.NO_CYCLE,
-                new Stop(0, Color.color(0.4, 0.45, 0.95, 0.16)),
-                new Stop(1, Color.color(0, 0, 0, 0)));
-        g.setFill(horizon);
+        g.setFill(HORIZON_GLOW);
         g.fillRect(0, 0, CANVAS_WIDTH, HIT_LINE_Y + 40);
 
-        g.setFill(Color.color(0, 0, 0, 0.4));
+        // Diagonalna faktura tła (poza autostradą) — klimat P3R
+        g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA, 0.05));
+        g.setLineWidth(1);
+        for (int i = -2; i < 10; i++) {
+            double x0 = i * 60;
+            g.strokeLine(x0, 0, x0 + CANVAS_HEIGHT * 0.4, CANVAS_HEIGHT);
+        }
+
+        g.setFill(PersonaPalette.alpha(PersonaPalette.BLACK, 0.45));
         g.fillRect(0, 0, SIDE_MARGIN - 6, CANVAS_HEIGHT);
         g.fillRect(SIDE_MARGIN + LANES * LANE_WIDTH + 6, 0, SIDE_MARGIN - 6, CANVAS_HEIGHT);
     }
 
     private void drawLanes(GraphicsContext g, long nowNanos) {
         // Podświetlenie horyzontu (głębia autostrady)
-        g.setFill(Color.color(0.45, 0.55, 0.95, 0.08));
+        g.setFill(PersonaPalette.alpha(PersonaPalette.AQUA, 0.12));
         g.fillPolygon(
                 new double[]{VANISH_CENTER_X - 6, VANISH_CENTER_X + 6, VANISH_CENTER_X},
                 new double[]{VANISH_Y, VANISH_Y, VANISH_Y - 28},
@@ -412,25 +584,21 @@ public final class GameScreen {
             double[] hit = laneBoundsAtDepth(lane, 1);
             double bottomL = SIDE_MARGIN + lane * LANE_WIDTH;
             double bottomR = SIDE_MARGIN + (lane + 1) * LANE_WIDTH;
-            Color laneTint = UiTheme.laneColor(lane);
+            Color laneTint = PersonaPalette.lane(lane);
 
-            if (laneHeld[lane]) {
-                g.setFill(laneTint.deriveColor(0, 1, 1, 0.14));
-            } else {
-                g.setFill(laneTint.deriveColor(0, 1, 1, 0.04));
-            }
+            g.setFill(PersonaPalette.alpha(laneTint, laneHeld[lane] ? 0.18 : 0.05));
             g.fillPolygon(
                     new double[]{top[0], top[1], hit[1], bottomR, bottomL, hit[0]},
                     new double[]{VANISH_Y, VANISH_Y, HIT_LINE_Y, CANVAS_HEIGHT, CANVAS_HEIGHT, HIT_LINE_Y},
                     6);
 
-            g.setStroke(Color.color(1, 1, 1, 0.14));
+            g.setStroke(PersonaPalette.alpha(PersonaPalette.WHITE, 0.12));
             g.setLineWidth(1);
             g.strokeLine(top[1], VANISH_Y, bottomR, CANVAS_HEIGHT);
 
             if (nowNanos < laneFlashUntilNanos[lane]) {
                 double alpha = (laneFlashUntilNanos[lane] - nowNanos) / 180_000_000.0;
-                g.setFill(UiTheme.laneColor(lane).deriveColor(0, 1, 1, 0.38 * alpha));
+                g.setFill(PersonaPalette.alpha(laneTint, 0.42 * alpha));
                 g.fillPolygon(
                         new double[]{top[0], top[1], hit[1], bottomR, bottomL, hit[0]},
                         new double[]{VANISH_Y, VANISH_Y, HIT_LINE_Y, CANVAS_HEIGHT, CANVAS_HEIGHT, HIT_LINE_Y},
@@ -438,24 +606,34 @@ public final class GameScreen {
             }
         }
 
-        // Krawędzie zewnętrzne autostrady
-        double[] leftTop = laneBoundsAtDepth(0, 0);
-        double[] rightTop = laneBoundsAtDepth(LANES - 1, 0);
-        g.setStroke(Color.color(1, 1, 1, 0.22));
-        g.setLineWidth(2);
-        g.strokeLine(leftTop[0], VANISH_Y, SIDE_MARGIN, CANVAS_HEIGHT);
-        g.strokeLine(rightTop[1], VANISH_Y, SIDE_MARGIN + LANES * LANE_WIDTH, CANVAS_HEIGHT);
-
-        // Linie „desk” przed hit-line (perspektywne poprzeczki)
-        g.setStroke(Color.color(1, 1, 1, 0.06));
-        g.setLineWidth(1);
-        for (int i = 1; i <= 5; i++) {
-            double depth = i / 6.0;
+        // Perspektywne poprzeczki — coraz jaśniejsze bliżej hit-line
+        for (int i = 1; i <= 6; i++) {
+            double depth = i / 7.0;
             double y = VANISH_Y + (HIT_LINE_Y - VANISH_Y) * depth;
             double left = laneBoundsAtDepth(0, depth)[0];
             double right = laneBoundsAtDepth(LANES - 1, depth)[1];
+            g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA, 0.05 + 0.12 * depth));
+            g.setLineWidth(1);
             g.strokeLine(left, y, right, y);
         }
+
+        // Neonowa rama gryfu (poświata + ostra linia) — sygnatura P3R
+        double[] leftTop = laneBoundsAtDepth(0, 0);
+        double[] rightTop = laneBoundsAtDepth(LANES - 1, 0);
+        double bx0 = SIDE_MARGIN;
+        double bx1 = SIDE_MARGIN + LANES * LANE_WIDTH;
+
+        g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA, 0.25));
+        g.setLineWidth(6);
+        g.strokeLine(leftTop[0], VANISH_Y, bx0, CANVAS_HEIGHT);
+        g.strokeLine(rightTop[1], VANISH_Y, bx1, CANVAS_HEIGHT);
+        g.strokeLine(leftTop[0], VANISH_Y, rightTop[1], VANISH_Y);
+
+        g.setStroke(PersonaPalette.AQUA_BRIGHT);
+        g.setLineWidth(2.5);
+        g.strokeLine(leftTop[0], VANISH_Y, bx0, CANVAS_HEIGHT);
+        g.strokeLine(rightTop[1], VANISH_Y, bx1, CANVAS_HEIGHT);
+        g.strokeLine(leftTop[0], VANISH_Y, rightTop[1], VANISH_Y);
     }
 
     private void drawHitLine(GraphicsContext g) {
@@ -463,53 +641,39 @@ public final class GameScreen {
         double highwayW = LANE_WIDTH * LANES;
 
         // Świecący pasek hit-line
-        g.setFill(Color.color(1, 1, 1, 0.04));
-        g.fillRect(highwayL, HIT_LINE_Y - 14, highwayW, 28);
-        g.setFill(Color.color(0.55, 0.65, 1.0, 0.12));
-        g.fillRect(highwayL, HIT_LINE_Y - 2, highwayW, 4);
+        g.setFill(PersonaPalette.alpha(PersonaPalette.AQUA, 0.06));
+        g.fillRect(highwayL, HIT_LINE_Y - 16, highwayW, 32);
+        g.setStroke(PersonaPalette.AQUA_BRIGHT);
+        g.setLineWidth(2);
+        g.strokeLine(highwayL, HIT_LINE_Y, highwayL + highwayW, HIT_LINE_Y);
 
         for (int lane = 0; lane < LANES; lane++) {
             NotePlacement target = notePlacement(lane, 0);
             if (target == null) continue;
 
-            Color laneCol = UiTheme.laneColor(lane);
-            double x = target.centerX - target.width / 2.0;
-            double y = target.centerY - target.height / 2.0;
-            double corner = noteCornerRadius(1.0);
-
-            g.setFill(Color.color(0, 0, 0, 0.5));
-            g.fillRoundRect(x, y, target.width, target.height, corner, corner);
-
-            if (laneHeld[lane]) {
-                g.setFill(laneCol.deriveColor(0, 1, 1, 0.4));
-                g.fillRoundRect(x, y, target.width, target.height, corner, corner);
-            }
-
-            g.setStroke(laneCol);
-            g.setLineWidth(laneHeld[lane] ? 3.5 : 2);
-            g.strokeRoundRect(x, y, target.width, target.height, corner, corner);
-
+            Color laneCol = PersonaPalette.lane(lane);
+            CrystalNote.drawReceptor(g, target.centerX, target.centerY,
+                    target.width, target.height, laneCol, laneHeld[lane]);
             drawKeyPill(g, lane, target.centerX, laneCol);
         }
     }
 
     private void drawKeyPill(GraphicsContext g, int lane, double centerX, Color laneCol) {
         String key = LANE_KEYS[lane].getName();
-        double pillW = 28;
-        double pillH = 22;
+        double pillW = 30;
+        double pillH = 24;
         double px = centerX - pillW / 2.0;
-        double py = HIT_LINE_Y + 38;
+        double py = HIT_LINE_Y + 40;
 
-        g.setFill(Color.color(0, 0, 0, 0.55));
-        g.fillRoundRect(px, py, pillW, pillH, 8, 8);
-        g.setStroke(laneCol.deriveColor(0, 1, 1, 0.85));
-        g.setLineWidth(1.5);
-        g.strokeRoundRect(px + 0.5, py + 0.5, pillW - 1, pillH - 1, 8, 8);
+        g.setFill(PersonaPalette.alpha(PersonaPalette.BLACK, 0.6));
+        g.fillRect(px, py, pillW, pillH);
+        g.setStroke(laneHeld[lane] ? PersonaPalette.AQUA_BRIGHT : PersonaPalette.alpha(laneCol, 0.9));
+        g.setLineWidth(laneHeld[lane] ? 2.0 : 1.5);
+        g.strokeRect(px + 0.5, py + 0.5, pillW - 1, pillH - 1);
 
-        g.setFill(Color.web(UiTheme.TEXT));
-        g.setFont(UiTheme.fontBold(12));
-        g.setTextAlign(TextAlignment.CENTER);
-        g.fillText(key, centerX, py + 15);
+        PersonaText.draw(g, key, centerX, py + 17,
+                PersonaFonts.heading(14), PersonaPalette.WHITE,
+                null, 0, null, PersonaText.SLANT, TextAlignment.CENTER);
     }
 
     private void drawNotes(GraphicsContext g) {
@@ -526,47 +690,11 @@ public final class GameScreen {
 
         for (DrawNote dn : visible) {
             NotePlacement place = dn.place;
-            int lane = dn.lane;
-
-            double corner = noteCornerRadius(place.depth);
-
-            // Poświata „z daleka” — im mniejsza nuta, tym jaśniejszy ślad
-            Color laneCol = UiTheme.laneColor(lane);
-            g.setFill(laneCol.deriveColor(0, 1, 1, 0.12 + 0.18 * (1 - place.depth)));
-            g.fillRoundRect(
-                    place.centerX - place.width * 0.55,
-                    place.centerY - place.height * 0.45,
-                    place.width * 1.1,
-                    place.height * 1.1,
-                    corner, corner);
-
-            g.setFill(laneCol);
-            g.fillRoundRect(
-                    place.centerX - place.width / 2.0,
-                    place.centerY - place.height / 2.0,
-                    place.width,
-                    place.height,
-                    corner, corner);
-
-            g.setFill(Color.color(1, 1, 1, 0.2 + 0.25 * place.depth));
-            g.fillRoundRect(
-                    place.centerX - place.width / 2.0,
-                    place.centerY - place.height / 2.0,
-                    place.width,
-                    place.height / 3.0,
-                    corner, corner);
-
-            // Odbłysk na „szybie” przy pełnym zbliżeniu
-            if (place.depth > 0.82) {
-                g.setStroke(Color.color(1, 1, 1, 0.35 * (place.depth - 0.82) / 0.18));
-                g.setLineWidth(1.5);
-                g.strokeRoundRect(
-                        place.centerX - place.width / 2.0 + 1,
-                        place.centerY - place.height / 2.0 + 1,
-                        place.width - 2,
-                        place.height - 2,
-                        corner, corner);
-            }
+            // Kryształ skalujemy lekko w pionie, by „odłamek” był wyrazisty
+            // (geometria/kolizja w logice gry pozostaje bez zmian — to tylko render).
+            CrystalNote.draw(g, place.centerX, place.centerY,
+                    place.width * 1.25, place.height * 2.0,
+                    place.depth, PersonaPalette.lane(dn.lane));
         }
     }
 
@@ -596,11 +724,6 @@ public final class GameScreen {
     private static double vanishLaneLeft(int lane) {
         double totalTop = LANES * TOP_LANE_WIDTH;
         return VANISH_CENTER_X - totalTop / 2.0 + lane * TOP_LANE_WIDTH;
-    }
-
-    /** Zaokrąglenie rogów nuty / receptora — spójne na całej autostradzie. */
-    private static double noteCornerRadius(double depth) {
-        return 6 + 6 * Math.min(1.0, depth * 1.15);
     }
 
     private NotePlacement notePlacement(int lane, int dtMs) {
@@ -641,63 +764,104 @@ public final class GameScreen {
 
     private record DrawNote(int lane, NotePlacement place) {}
 
-    private void drawHud(GraphicsContext g) {
-        drawGlassPanel(g, 12, 12, 172, 62);
-        drawGlassPanel(g, CANVAS_WIDTH - 184, 12, 172, 62);
+    private void drawHud(GraphicsContext g, long nowNanos) {
+        int scoreVal = score.totalScore();
+        int comboVal = score.combo();
+        int multVal = score.multiplier();
 
-        g.setTextAlign(TextAlignment.LEFT);
-        g.setFill(Color.web(UiTheme.TEXT_DIM));
-        g.setFont(UiTheme.font(10));
-        g.fillText("WYNIK", 24, 30);
-        g.setFill(Color.web(UiTheme.TEXT));
-        g.setFont(UiTheme.fontBold(22));
-        g.fillText(formatScore(score.totalScore()), 24, 54);
+        // Wykrycie zmiany wartości wyzwala efekt „pop” (czysto wizualne, nie dotyka punktacji).
+        if (scoreVal != shownScore) { shownScore = scoreVal; scorePopNanos = nowNanos; }
+        if (comboVal != shownCombo) { shownCombo = comboVal; comboPopNanos = nowNanos; }
+        if (multVal  != shownMult)  { shownMult  = multVal;  multPopNanos  = nowNanos; }
 
-        g.setFill(Color.web(UiTheme.TEXT_DIM));
-        g.setFont(UiTheme.font(10));
-        g.fillText("H " + score.hits() + "   M " + score.misses(), 24, 68);
+        // ── panel WYNIK (lewy) ──
+        drawGlassPanel(g, 12, 10, 190, 80);
+        PersonaText.plain(g, "SCORE", 26, 32, PersonaFonts.label(13),
+                PersonaPalette.AQUA, TextAlignment.LEFT);
+        drawPopNumber(g, formatScore(scoreVal), 26, 70, 34,
+                popScale(nowNanos, scorePopNanos), PersonaPalette.WHITE, TextAlignment.LEFT);
+        PersonaText.plain(g, "HIT " + score.hits() + "   MISS " + score.misses(), 26, 86,
+                PersonaFonts.body(11), PersonaPalette.WHITE_DIM, TextAlignment.LEFT);
 
-        g.setTextAlign(TextAlignment.RIGHT);
-        int mult = score.multiplier();
-        int combo = score.combo();
-        g.setFill(Color.web(UiTheme.TEXT_DIM));
-        g.setFont(UiTheme.font(10));
-        g.fillText("COMBO", CANVAS_WIDTH - 24, 30);
+        // ── panel COMBO / MNOŻNIK (prawy) ──
+        double rx = CANVAS_WIDTH - 202;
+        drawGlassPanel(g, rx, 10, 190, 80);
+        PersonaText.plain(g, "COMBO", CANVAS_WIDTH - 26, 32, PersonaFonts.label(13),
+                PersonaPalette.AQUA, TextAlignment.RIGHT);
+        Color comboCol = comboVal > 0 ? PersonaPalette.COMBO : PersonaPalette.MUTED;
+        drawPopNumber(g, String.valueOf(comboVal), CANVAS_WIDTH - 26, 72, 36,
+                popScale(nowNanos, comboPopNanos), comboCol, TextAlignment.RIGHT);
+        Color multCol = multVal > 1 ? PersonaPalette.AQUA_BRIGHT : PersonaPalette.MUTED;
+        drawPopNumber(g, "x" + multVal, rx + 14, 72, 22,
+                popScale(nowNanos, multPopNanos), multCol, TextAlignment.LEFT);
 
-        Color multColor = mult > 1 ? Color.web(UiTheme.ACCENT_SOFT) : Color.web(UiTheme.TEXT_MUTED);
-        g.setFill(multColor);
-        g.setFont(UiTheme.fontBold(22));
-        g.fillText("x" + mult, CANVAS_WIDTH - 24, 54);
+        // ── pasek postępu utworu (góra) ──
+        double prog = songEndTimeMs > 0
+                ? Math.max(0, Math.min(1.0, currentTimeMs / songEndTimeMs))
+                : 0;
+        g.setFill(PersonaPalette.alpha(PersonaPalette.NAVY, 0.8));
+        g.fillRect(0, 0, CANVAS_WIDTH, 5);
+        g.setFill(PersonaPalette.AQUA);
+        g.fillRect(0, 0, CANVAS_WIDTH * prog, 5);
+        g.setFill(PersonaPalette.AQUA_BRIGHT);
+        g.fillRect(Math.max(0, CANVAS_WIDTH * prog - 2), 0, 3, 6);
 
-        if (combo > 0) {
-            g.setFill(Color.web("#fb923c"));
-            g.setFont(Font.font(Font.getDefault().getFamily(), FontWeight.BOLD, 13));
-            g.fillText(combo + "×", CANVAS_WIDTH - 24, 68);
-        }
-
-        // Pasek tytułu na dole
-        double barW = Math.min(340, CANVAS_WIDTH - 40);
+        // ── pasek tytułu (dół, ukośny) ──
+        double barW = Math.min(360, CANVAS_WIDTH - 40);
         double barX = (CANVAS_WIDTH - barW) / 2.0;
-        double barY = CANVAS_HEIGHT - 34;
-        g.setFill(Color.color(0.06, 0.08, 0.14, 0.88));
-        g.fillRoundRect(barX, barY, barW, 26, 13, 13);
-        g.setStroke(Color.web(UiTheme.BORDER));
+        double barY = CANVAS_HEIGHT - 36;
+        double bs = 10;
+        double[] bxs = {barX + bs, barX + barW + bs, barX + barW, barX};
+        double[] bys = {barY, barY, barY + 28, barY + 28};
+        g.setFill(PersonaPalette.alpha(PersonaPalette.NAVY, 0.9));
+        g.fillPolygon(bxs, bys, 4);
+        g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA, 0.55));
         g.setLineWidth(1);
-        g.strokeRoundRect(barX + 0.5, barY + 0.5, barW - 1, 25, 13, 13);
+        g.strokeLine(barX + bs, barY, barX + barW + bs, barY);
+        PersonaText.plain(g, context.title() + "   ·   " + context.bpm() + " BPM",
+                CANVAS_WIDTH / 2.0, barY + 19, PersonaFonts.label(12),
+                PersonaPalette.WHITE_DIM, TextAlignment.CENTER);
+    }
 
-        g.setFill(Color.web(UiTheme.TEXT_MUTED));
-        g.setFont(UiTheme.font(11));
-        g.setTextAlign(TextAlignment.CENTER);
-        String footer = context.title() + "  ·  " + context.bpm() + " BPM";
-        g.fillText(footer, CANVAS_WIDTH / 2.0, barY + 17);
+    /** Skala „pop” licznika: krótki impuls po zmianie wartości, potem 1.0. */
+    private static double popScale(long now, long popStart) {
+        double t = (now - popStart) / (double) HUD_POP_NANOS;
+        if (t < 0 || t >= 1.0) return 1.0;
+        return 1.0 + 0.35 * Math.sin(t * Math.PI);
+    }
+
+    /**
+     * Rysuje wielki licznik HUD ze skalą „pop” realizowaną transformacją kontekstu
+     * (a nie zmianą rozmiaru fontu — dzięki czemu cache fontów nie puchnie).
+     */
+    private static void drawPopNumber(GraphicsContext g, String s, double x, double baseline,
+                                      double baseSize, double scale, Color fill, TextAlignment align) {
+        g.save();
+        g.translate(x, baseline);
+        g.scale(scale, scale);
+        PersonaText.draw(g, s, 0, 0, PersonaFonts.display(baseSize), fill,
+                PersonaPalette.BLACK, 2.5,
+                PersonaPalette.alpha(PersonaPalette.AQUA, 0.5),
+                PersonaText.SLANT, align);
+        g.restore();
     }
 
     private static void drawGlassPanel(GraphicsContext g, double x, double y, double w, double h) {
-        g.setFill(Color.color(0.07, 0.09, 0.15, 0.82));
-        g.fillRoundRect(x, y, w, h, 12, 12);
-        g.setStroke(Color.web(UiTheme.BORDER));
+        double s = 12; // ścięcie górnej krawędzi w prawo (ukos P3R)
+        double[] xs = {x + s, x + w + s, x + w, x};
+        double[] ys = {y, y, y + h, y + h};
+
+        g.setFill(PersonaPalette.alpha(PersonaPalette.NAVY, 0.82));
+        g.fillPolygon(xs, ys, 4);
+        g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA, 0.5));
         g.setLineWidth(1);
-        g.strokeRoundRect(x + 0.5, y + 0.5, w - 1, h - 1, 12, 12);
+        g.strokePolygon(xs, ys, 4);
+
+        // narożny akcent neonowy (corner bracket) wzdłuż ukośnej krawędzi
+        g.setStroke(PersonaPalette.AQUA_BRIGHT);
+        g.setLineWidth(2);
+        g.strokeLine(x + s, y, x + s + 18, y);
+        g.strokeLine(x + s, y, x + s - s * 16 / h, y + 16);
     }
 
     private static String formatScore(int score) {
