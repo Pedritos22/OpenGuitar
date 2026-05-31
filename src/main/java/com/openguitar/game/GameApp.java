@@ -110,11 +110,13 @@ public class GameApp extends Application {
                 ? "Score: " + result.totalScore()
                 : "Score: 0  (spróbuj jeszcze raz!)");
         alert.setContentText(String.format(
-                "Hits:      %d%nMisses:    %d%nMax combo: %d",
+                "Trafienia:     %d%nPudła:        %d%nMax combo:    %d",
                 result.hits(), result.misses(), result.maxCombo()));
-        alert.getDialogPane().setStyle(
-                "-fx-background-color: #111827;"
-              + "-fx-text-fill: white;");
+        alert.getDialogPane().setStyle(UiTheme.dialogPaneStyle());
+        var headerLabel = alert.getDialogPane().lookup(".header-panel .label");
+        if (headerLabel != null) {
+            headerLabel.setStyle(UiTheme.dialogHeaderStyle());
+        }
         alert.getButtonTypes().setAll(ButtonType.OK);
         alert.showAndWait();
     }
