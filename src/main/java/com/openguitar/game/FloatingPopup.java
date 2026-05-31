@@ -1,9 +1,11 @@
 package com.openguitar.game;
 
+import com.openguitar.game.view.PersonaFonts;
+import com.openguitar.game.view.PersonaPalette;
+import com.openguitar.game.view.PersonaText;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
 import javafx.scene.text.TextAlignment;
 
 /**
@@ -55,18 +57,18 @@ final class FloatingPopup {
 
     static FloatingPopup judgment(String text, double x, double y, Color color) {
         long now = System.nanoTime();
-        return new FloatingPopup(text, null, x, y, color, 20, now, 720_000_000L, Style.JUDGMENT);
+        return new FloatingPopup(text, null, x, y, color, 30, now, 720_000_000L, Style.JUDGMENT);
     }
 
     static FloatingPopup multiplier(int mult, double centerX, double centerY) {
         long now = System.nanoTime();
         return new FloatingPopup(
-                "x" + mult + "!",
+                "x" + mult,
                 "MULTIPLIER",
                 centerX,
                 centerY,
-                Color.web(UiTheme.ACCENT_SOFT),
-                36,
+                PersonaPalette.AQUA_BRIGHT,
+                52,
                 now,
                 1_450_000_000L,
                 Style.MULTIPLIER);
@@ -74,13 +76,13 @@ final class FloatingPopup {
 
     static FloatingPopup combo(int combo, double centerX, double centerY) {
         long now = System.nanoTime();
-        double size = combo >= 50 ? 34 : 28;
+        double size = combo >= 50 ? 50 : 40;
         return new FloatingPopup(
-                combo + " COMBO!",
+                combo + " COMBO",
                 null,
                 centerX,
                 centerY - 28,
-                Color.web("#fb923c"),
+                PersonaPalette.COMBO,
                 size,
                 now,
                 1_150_000_000L,
@@ -94,8 +96,8 @@ final class FloatingPopup {
                 null,
                 centerX,
                 centerY,
-                Color.web("#f87171"),
-                30,
+                PersonaPalette.MISS,
+                40,
                 now,
                 1_050_000_000L,
                 Style.COMBO_BREAK);
@@ -129,25 +131,27 @@ final class FloatingPopup {
 
         g.save();
         g.setGlobalAlpha(alpha);
-        g.setTextAlign(TextAlignment.CENTER);
 
-        String family = Font.getDefault().getFamily();
         if (subtext != null) {
-            g.setFill(Color.color(1, 1, 1, 0.75));
-            g.setFont(Font.font(family, 14));
-            g.fillText(subtext, x, drawY - fontSize * 0.55);
+            PersonaText.draw(g, subtext, x, drawY - fontSize * 0.62,
+                    PersonaFonts.label(15), PersonaPalette.WHITE_DIM,
+                    null, 0, null, PersonaText.SLANT, TextAlignment.CENTER);
         }
 
-        g.setFill(color);
-        g.setFont(Font.font(family, FontWeight.BOLD, fontSize));
-        g.fillText(text, x, drawY);
-
-        // Delikatna poświata pod napisem (większe popupy)
+        // Poświata pod napisem (większe popupy) — drugi przebieg bez alokacji
+        Font font = PersonaFonts.display(fontSize);
         if (style == Style.MULTIPLIER || style == Style.COMBO) {
-            g.setFill(color.deriveColor(0, 1, 1, 0.18));
-            g.setFont(Font.font(family, FontWeight.BOLD, fontSize * 1.08));
-            g.fillText(text, x, drawY + 2);
+            PersonaText.draw(g, text, x, drawY + 2,
+                    PersonaFonts.display(fontSize * 1.1),
+                    PersonaPalette.alpha(color, 0.22),
+                    null, 0, null, PersonaText.SLANT, TextAlignment.CENTER);
         }
+
+        // Właściwy napis: pochył + gruby obrys + kontrastowy cień
+        PersonaText.draw(g, text, x, drawY, font, color,
+                PersonaPalette.BLACK, Math.max(2.5, fontSize * 0.07),
+                PersonaPalette.alpha(PersonaPalette.AQUA, 0.5),
+                PersonaText.SLANT, TextAlignment.CENTER);
 
         g.restore();
     }
