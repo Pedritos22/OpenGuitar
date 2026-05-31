@@ -110,6 +110,9 @@ public final class GameScreen {
     /** Czas trwania „pop” licznika HUD (skalowanie po zmianie wartości). */
     private static final long HUD_POP_NANOS = 220_000_000L;
 
+    /** Czas trwania błysku „GO!” na końcu odliczania startowego. */
+    private static final long GO_FLASH_NANOS = 600_000_000L;
+
     /** Opcje ekranu pauzy. */
     private static final String[] PAUSE_OPTIONS = {"WZNÓW", "WYJDŹ DO MENU"};
     private static final Font RANK_STAMP_FONT = PersonaFonts.display(140);
@@ -276,7 +279,7 @@ public final class GameScreen {
                 player.setOnEndOfMedia(this::finishIfNotYet);
                 player.setOnError(() -> LOG.log(Level.WARNING,
                         "MediaPlayer error: " + player.getError()));
-                player.play();
+                // Odtwarzanie startuje dopiero po odliczeniu (patrz beginCountdown / finishCountdown).
             } catch (Exception ex) {
                 LOG.log(Level.WARNING,
                         "Nie udało się załadować audio " + uri + " - kontynuuję bez muzyki.", ex);
@@ -295,6 +298,40 @@ public final class GameScreen {
         loop.start();
         canvas.requestFocus();
         scene.getRoot().requestFocus();
+
+        // Wejście do gry przez odliczanie (jeśli włączone w ustawieniach).
+        beginCountdown();
+    }
+
+    /** Rozpoczyna odliczanie startowe. Jeśli wyłączone — od razu rusza rozgrywka/audio. */
+    private void beginCountdown() {
+        if (countdownTotalNanos <= 0) {
+            startPlayback();
+            return;
+        }
+        countingDown = true;
+        countdownStartNanos = -1; // ustawiane w pierwszym ticku
+    }
+
+    /** Domknięcie odliczania: rusza audio (lub zegar ścienny) i wpuszcza gracza do gry. */
+    private void finishCountdown(long nowNanos) {
+        countingDown = false;
+        countdownStartNanos = -1;
+        startPlayback();
+        // W trybie bez audio przesuwamy punkt startu pętli tak, by zegar ruszył od currentTimeMs.
+        if (player == null) {
+            loopStartNanos = nowNanos - (long) (currentTimeMs * 1_000_000.0);
+        }
+        for (int i = 0; i < LANES; i++) {
+            laneHeld[i] = false;
+        }
+    }
+
+    /** Startuje/wznawia odtwarzanie audio (jeśli jest). */
+    private void startPlayback() {
+        if (player != null) {
+            player.play();
+        }
     }
 
     /** Zatrzymuje rozgrywkę i zwalnia zasoby (audio, pętla). Idempotentne. */
@@ -322,12 +359,25 @@ public final class GameScreen {
         }
 
         // Delta między klatkami (z zegara ściennego). Aktualizujemy zawsze — także w
-        // pauzie — aby po wznowieniu delta nie zawierała całego czasu pauzy.
+        // pauzie/odliczaniu — aby po wznowieniu delta nie zawierała całego postoju.
         double frameDtMs = (lastFrameNanos < 0)
                 ? 0
                 : (nowNanos - lastFrameNanos) / 1_000_000.0;
         frameDtMs = Math.min(frameDtMs, 100.0); // zabezpieczenie po zacięciu/minimalizacji
         lastFrameNanos = nowNanos;
+
+        // Odliczanie startowe: zamrażamy zegar i audio, rysujemy scenę + overlay z liczbą.
+        if (countingDown) {
+            if (countdownStartNanos < 0) {
+                countdownStartNanos = nowNanos;
+            }
+            if (nowNanos - countdownStartNanos >= countdownTotalNanos) {
+                finishCountdown(nowNanos);
+            } else {
+                render(nowNanos);
+                return;
+            }
+        }
 
         // W pauzie zamrażamy stan gry: nie przesuwamy czasu, nie naliczamy MISS-ów,
         // nie wygaszamy popupów. Rysujemy wciąż scenę + nakładkę pauzy.
@@ -412,6 +462,10 @@ public final class GameScreen {
             }
             return;
         }
+        // Podczas odliczania ignorujemy wejście, żeby nie zaliczać przypadkowych trafień.
+        if (countingDown) {
+            return;
+        }
         if (paused) {
             handlePauseKey(key);
             return;
@@ -465,14 +519,19 @@ public final class GameScreen {
     private void resumeGame() {
         if (!paused) return;
         paused = false;
-        if (player != null) {
-            player.play();
+        if (countdownTotalNanos > 0) {
+            // Wznowienie również przez odliczanie — gracz ma czas złapać rytm.
+            // Audio zostaje wstrzymane do końca odliczania; finishCountdown wyrówna zegar.
+            beginCountdown();
         } else {
-            // tryb bez audio: przesuwamy punkt startu o długość pauzy, by czas nie skoczył
-            loopStartNanos += System.nanoTime() - pauseStartNanos;
-        }
-        for (int i = 0; i < LANES; i++) {
-            laneHeld[i] = false;
+            startPlayback();
+            if (player == null) {
+                // tryb bez audio: przesuwamy punkt startu o długość pauzy, by czas nie skoczył
+                loopStartNanos += System.nanoTime() - pauseStartNanos;
+            }
+            for (int i = 0; i < LANES; i++) {
+                laneHeld[i] = false;
+            }
         }
     }
 
@@ -572,6 +631,9 @@ public final class GameScreen {
     }
 
     private void spawnJudgmentPopup(int lane, HitJudgment judgment) {
+        if (!showHitPopups) {
+            return;
+        }
         boolean placed = computePlacement(lane, 0);
         double cx = placed ? npX
                 : SIDE_MARGIN + lane * LANE_WIDTH + LANE_WIDTH / 2.0;
@@ -617,8 +679,77 @@ public final class GameScreen {
         drawHud(g, nowNanos);
         drawPopups(g, nowNanos);
 
+        if (countingDown) {
+            drawCountdown(g, nowNanos);
+        }
+
         if (paused) {
             drawPauseMenu(g, nowNanos);
+        }
+    }
+
+    /**
+     * Nakładka odliczania w stylu P3R: przyciemnienie, ukośny pas akcentowy oraz
+     * wielka liczba z efektem „pop” (skala + zanik na każdej sekundzie), a na końcu
+     * błysk „GO!”. Czysto wizualne — czas gry stoi do końca odliczania.
+     */
+    private void drawCountdown(GraphicsContext g, long nowNanos) {
+        long elapsed = (countdownStartNanos < 0) ? 0 : nowNanos - countdownStartNanos;
+        long numbersNanos = countdownTotalNanos - GO_FLASH_NANOS;
+
+        g.setFill(PersonaPalette.alpha(PersonaPalette.BLACK, 0.55));
+        g.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        double cy = CANVAS_HEIGHT * 0.42;
+        boolean isGo = elapsed >= numbersNanos;
+
+        // Ukośny pas za liczbą.
+        g.setFill(PersonaPalette.alpha(PersonaPalette.DEEP_BLUE, 0.85));
+        g.fillPolygon(
+                new double[]{0, CANVAS_WIDTH, CANVAS_WIDTH, 0},
+                new double[]{cy - 92, cy - 120, cy + 60, cy + 88},
+                4);
+        g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA_BRIGHT, 0.9));
+        g.setLineWidth(2);
+        g.strokeLine(0, cy - 120, CANVAS_WIDTH, cy - 120 + 28);
+        g.strokeLine(0, cy + 88, CANVAS_WIDTH, cy + 88 - 28);
+
+        String text;
+        double phase; // 0..1 w obrębie bieżącej fazy (do animacji „pop”)
+        Color color;
+        if (isGo) {
+            text = "GO!";
+            phase = clamp01((elapsed - numbersNanos) / (double) GO_FLASH_NANOS);
+            color = PersonaPalette.TEAL;
+        } else {
+            int secondIdx = (int) (elapsed / 1_000_000_000L); // 0,1,2,...
+            int total = (int) (numbersNanos / 1_000_000_000L);
+            text = String.valueOf(Math.max(1, total - secondIdx));
+            phase = (elapsed % 1_000_000_000L) / 1_000_000_000.0;
+            color = PersonaPalette.WHITE;
+        }
+
+        // „Pop”: szybkie powiększenie z overshootem na początku fazy, potem łagodny zanik.
+        double scale = isGo ? (0.6 + 0.5 * easeOutBack(clamp01(phase / 0.4)))
+                            : (0.7 + 0.6 * easeOutBack(clamp01(phase / 0.35)));
+        double alpha = isGo ? (1 - easeOut(phase)) * 0.9 + 0.1
+                            : 1 - easeOut(clamp01((phase - 0.55) / 0.45));
+
+        g.save();
+        g.translate(CANVAS_WIDTH / 2.0, cy);
+        g.scale(scale, scale);
+        PersonaText.draw(g, text, 0, isGo ? 30 : 44,
+                PersonaFonts.display(isGo ? 96 : 132),
+                PersonaPalette.alpha(color, alpha),
+                PersonaPalette.alpha(PersonaPalette.BLACK, alpha), 6,
+                PersonaPalette.alpha(PersonaPalette.AQUA, 0.5 * alpha),
+                PersonaText.SLANT, TextAlignment.CENTER);
+        g.restore();
+
+        if (!isGo) {
+            PersonaText.plain(g, "PRZYGOTUJ SIĘ", CANVAS_WIDTH / 2.0, cy + 118,
+                    PersonaFonts.label(14),
+                    PersonaPalette.alpha(PersonaPalette.WHITE_DIM, 0.85), TextAlignment.CENTER);
         }
     }
 
