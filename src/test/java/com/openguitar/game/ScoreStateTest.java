@@ -79,6 +79,8 @@ class ScoreStateTest {
         assertEquals(450, r.totalScore());
         assertEquals(2, r.hits());
         assertEquals(1, r.misses());
+        assertEquals(1, r.perfect());
+        assertEquals(1, r.great());
         assertEquals(2, r.maxCombo());
     }
 

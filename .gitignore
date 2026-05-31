@@ -19,3 +19,7 @@ songs/*.MP3
 songs/*.WAV
 songs/*.AIFF
 songs/*.FLAC
+
+# Lokalne statystyki gracza (generowane w runtime) - nie wersjonujemy.
+stats.db
+stats.json

@@ -22,6 +22,8 @@ public final class ScoreState {
     private int totalScore = 0;
     private int hits = 0;
     private int misses = 0;
+    private int perfect = 0;
+    private int great = 0;
     private int combo = 0;
     private int maxCombo = 0;
 
@@ -41,6 +43,11 @@ public final class ScoreState {
         }
         totalScore += judgment.basePoints() * multiplier();
         hits++;
+        if (judgment == HitJudgment.PERFECT) {
+            perfect++;
+        } else if (judgment == HitJudgment.GREAT) {
+            great++;
+        }
         combo++;
         if (combo > maxCombo) {
             maxCombo = combo;
@@ -56,11 +63,13 @@ public final class ScoreState {
     public int totalScore() { return totalScore; }
     public int hits()       { return hits; }
     public int misses()     { return misses; }
+    public int perfect()    { return perfect; }
+    public int great()      { return great; }
     public int combo()      { return combo; }
     public int maxCombo()   { return maxCombo; }
 
     /** Buduje finalny {@link GameResult} dla danego utworu. */
     public GameResult toResult(String songId) {
-        return new GameResult(songId, totalScore, hits, misses, maxCombo);
+        return new GameResult(songId, totalScore, hits, misses, perfect, great, maxCombo);
     }
 }

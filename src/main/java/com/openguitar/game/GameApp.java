@@ -6,8 +6,6 @@ import com.openguitar.beatmap.SongContext;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
-import javafx.scene.control.ButtonType;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
@@ -38,7 +36,7 @@ public class GameApp extends Application {
 
     private static final Logger LOG = Logger.getLogger(GameApp.class.getName());
     private static final Path SONGS_DIR = Paths.get("songs").toAbsolutePath();
-    private static final Path STATS_FILE = Paths.get("stats.json").toAbsolutePath();
+    private static final Path STATS_FILE = Paths.get("stats.db").toAbsolutePath();
 
     private final StatsStore stats = new StatsStore(STATS_FILE);
     private Stage stage;
@@ -64,6 +62,7 @@ public class GameApp extends Application {
         });
         stage.setOnCloseRequest(e -> {
             if (activeGame != null) activeGame.stop();
+            stats.close();
             Platform.exit();
         });
 
@@ -118,38 +117,16 @@ public class GameApp extends Application {
     private void onSongFinished(GameResult result) {
         LOG.info(() -> "Wynik: " + result);
         activeGame = null;
+        // Animowany ekran wyników pokazuje już GameScreen; tu tylko utrwalamy
+        // statystyki (SQLite) i wracamy do menu / zamykamy okno.
         stats.record(result);
-
-        // UWAGA: ten callback jest wywoływany z wnętrza AnimationTimer (puls renderowania)
-        // lub z setOnEndOfMedia. JavaFX zabrania pokazywania modalnych dialogów
-        // (Alert.showAndWait) podczas pulsu/layoutu - dlatego odraczamy do następnego
-        // pulsu przez Platform.runLater().
         Platform.runLater(() -> {
-            showResult(result);
             if (returnToMenuAfterSong) {
                 launchMenu();
             } else {
                 stage.close();
             }
         });
-    }
-
-    private void showResult(GameResult result) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Koniec utworu");
-        alert.setHeaderText(result.totalScore() > 0
-                ? "Score: " + result.totalScore()
-                : "Score: 0  (spróbuj jeszcze raz!)");
-        alert.setContentText(String.format(
-                "Trafienia:     %d%nPudła:        %d%nMax combo:    %d",
-                result.hits(), result.misses(), result.maxCombo()));
-        alert.getDialogPane().setStyle(UiTheme.dialogPaneStyle());
-        var headerLabel = alert.getDialogPane().lookup(".header-panel .label");
-        if (headerLabel != null) {
-            headerLabel.setStyle(UiTheme.dialogHeaderStyle());
-        }
-        alert.getButtonTypes().setAll(ButtonType.OK);
-        alert.showAndWait();
     }
 
     // --------------------------- CLI args ---------------------------
