@@ -25,7 +25,7 @@ import java.util.logging.Logger;
 
 /**
  * Ekran menu głównego: lista utworów z {@code songs/}, każdy ze swoim
- * statusem (READY / NO BEATMAP) i przyciskiem akcji (Graj / Generuj + graj).
+ * statusem (GOTOWE / BRAK MAPY) i przyciskiem akcji (Graj lub najpierw Generuj, potem Graj).
  */
 public final class MenuScreen {
 
@@ -149,28 +149,31 @@ public final class MenuScreen {
     private HBox buildRow(SongEntry entry) {
         boolean ready = entry.hasBeatmap();
 
-        Label name = new Label(entry.title());
+        Label name = ellipsisLabel(entry.title());
         name.setTextFill(Color.web(UiTheme.TEXT));
         name.setFont(UiTheme.fontSemiBold(15));
 
-        String meta = entry.audioPath().getFileName().toString();
-        if (ready) {
-            meta += "  ·  " + entry.context().notes().size() + " nut  ·  "
-                    + entry.context().bpm() + " BPM";
-        }
-        Label fileLabel = new Label(meta);
+        Label fileLabel = ellipsisLabel(metaLine(entry, ready ? entry.context() : null));
         fileLabel.setTextFill(Color.web(UiTheme.TEXT_DIM));
         fileLabel.setFont(UiTheme.font(11));
 
         VBox info = new VBox(3, name, fileLabel);
+        info.setMinWidth(0);
+        info.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(info, Priority.ALWAYS);
 
         Label badge = new Label(ready ? "GOTOWE" : "BRAK MAPY");
         badge.setStyle(ready ? UiTheme.badgeReady() : UiTheme.badgePending());
+        badge.setMinWidth(Region.USE_PREF_SIZE);
 
-        Button action = new Button(ready ? "Graj" : "Generuj + graj");
+        Button action = new Button(ready ? "Graj" : "Generuj");
         action.setStyle(ready ? UiTheme.primaryButton() : UiTheme.warnButton());
-        action.setOnAction(e -> handleSelect(entry, action));
+        action.setMinWidth(Region.USE_PREF_SIZE);
+
+        final SongContext[] contextHolder = new SongContext[1];
+        if (ready) {
+            contextHolder[0] = withAbsoluteAudio(entry.context(), entry.audioPath());
+        }
 
         HBox row = new HBox(14, info, badge, action);
         row.setAlignment(Pos.CENTER_LEFT);
@@ -179,7 +182,56 @@ public final class MenuScreen {
         row.setOnMouseEntered(e -> row.setStyle(UiTheme.cardRowHover(ready)));
         row.setOnMouseExited(e -> row.setStyle(UiTheme.cardRow(ready)));
 
+        action.setOnAction(e -> {
+            if (contextHolder[0] != null) {
+                startGame(contextHolder[0], action);
+            } else {
+                generateBeatmap(entry, action, row, badge, fileLabel, contextHolder);
+            }
+        });
+
         return row;
+    }
+
+    private static Label ellipsisLabel(String text) {
+        Label label = new Label(text);
+        label.setMinWidth(0);
+        label.setMaxWidth(Double.MAX_VALUE);
+        label.setEllipsisString("...");
+        return label;
+    }
+
+    private static String metaLine(SongEntry entry, SongContext ctx) {
+        String meta = entry.audioPath().getFileName().toString();
+        if (ctx != null) {
+            meta += "  ·  " + ctx.notes().size() + " nut  ·  " + ctx.bpm() + " BPM";
+        }
+        return meta;
+    }
+
+    private void startGame(SongContext ctx, Button button) {
+        button.setDisable(true);
+        onSongSelected.accept(ctx);
+    }
+
+    private void applyReadyRow(
+            HBox row,
+            Label badge,
+            Label fileLabel,
+            Button action,
+            SongContext[] contextHolder,
+            SongEntry entry,
+            SongContext ctx) {
+        contextHolder[0] = ctx;
+        action.setDisable(false);
+        action.setText("Graj");
+        action.setStyle(UiTheme.primaryButton());
+        badge.setText("GOTOWE");
+        badge.setStyle(UiTheme.badgeReady());
+        fileLabel.setText(metaLine(entry, ctx));
+        row.setStyle(UiTheme.cardRow(true));
+        row.setOnMouseEntered(e -> row.setStyle(UiTheme.cardRowHover(true)));
+        row.setOnMouseExited(e -> row.setStyle(UiTheme.cardRow(true)));
     }
 
     private static Button styledButton(String text, boolean primary) {
@@ -188,14 +240,14 @@ public final class MenuScreen {
         return b;
     }
 
-    private void handleSelect(SongEntry entry, Button button) {
+    private void generateBeatmap(
+            SongEntry entry,
+            Button button,
+            HBox row,
+            Label badge,
+            Label fileLabel,
+            SongContext[] contextHolder) {
         button.setDisable(true);
-
-        if (entry.hasBeatmap()) {
-            onSongSelected.accept(withAbsoluteAudio(entry.context(), entry.audioPath()));
-            return;
-        }
-
         button.setText("Generuję...");
         setStatus("Analiza: " + entry.audioPath().getFileName() + " — to może chwilę potrwać");
 
@@ -213,8 +265,8 @@ public final class MenuScreen {
             }
         };
         task.setOnSucceeded(ev -> {
-            setStatus("Beatmapa gotowa.");
-            onSongSelected.accept(task.getValue());
+            setStatus("Beatmapa gotowa — kliknij Graj.");
+            applyReadyRow(row, badge, fileLabel, button, contextHolder, entry, task.getValue());
         });
         task.setOnFailed(ev -> {
             Throwable t = task.getException();
