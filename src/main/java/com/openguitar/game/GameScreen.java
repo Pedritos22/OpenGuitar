@@ -764,27 +764,29 @@ public final class GameScreen {
                 3);
 
         for (int lane = 0; lane < LANES; lane++) {
-            double[] top = laneBoundsAtDepth(lane, 0);
-            double[] hit = laneBoundsAtDepth(lane, 1);
+            double topL = laneLeftAtDepth(lane, 0);
+            double topR = laneRightAtDepth(lane, 0);
+            double hitL = laneLeftAtDepth(lane, 1);
+            double hitR = laneRightAtDepth(lane, 1);
             double bottomL = SIDE_MARGIN + lane * LANE_WIDTH;
             double bottomR = SIDE_MARGIN + (lane + 1) * LANE_WIDTH;
             Color laneTint = PersonaPalette.lane(lane);
 
             g.setFill(PersonaPalette.alpha(laneTint, laneHeld[lane] ? 0.18 : 0.05));
             g.fillPolygon(
-                    new double[]{top[0], top[1], hit[1], bottomR, bottomL, hit[0]},
+                    new double[]{topL, topR, hitR, bottomR, bottomL, hitL},
                     new double[]{VANISH_Y, VANISH_Y, HIT_LINE_Y, CANVAS_HEIGHT, CANVAS_HEIGHT, HIT_LINE_Y},
                     6);
 
             g.setStroke(PersonaPalette.alpha(PersonaPalette.WHITE, 0.12));
             g.setLineWidth(1);
-            g.strokeLine(top[1], VANISH_Y, bottomR, CANVAS_HEIGHT);
+            g.strokeLine(topR, VANISH_Y, bottomR, CANVAS_HEIGHT);
 
             if (nowNanos < laneFlashUntilNanos[lane]) {
                 double alpha = (laneFlashUntilNanos[lane] - nowNanos) / 180_000_000.0;
                 g.setFill(PersonaPalette.alpha(laneTint, 0.42 * alpha));
                 g.fillPolygon(
-                        new double[]{top[0], top[1], hit[1], bottomR, bottomL, hit[0]},
+                        new double[]{topL, topR, hitR, bottomR, bottomL, hitL},
                         new double[]{VANISH_Y, VANISH_Y, HIT_LINE_Y, CANVAS_HEIGHT, CANVAS_HEIGHT, HIT_LINE_Y},
                         6);
             }
@@ -794,30 +796,30 @@ public final class GameScreen {
         for (int i = 1; i <= 6; i++) {
             double depth = i / 7.0;
             double y = VANISH_Y + (HIT_LINE_Y - VANISH_Y) * depth;
-            double left = laneBoundsAtDepth(0, depth)[0];
-            double right = laneBoundsAtDepth(LANES - 1, depth)[1];
+            double left = laneLeftAtDepth(0, depth);
+            double right = laneRightAtDepth(LANES - 1, depth);
             g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA, 0.05 + 0.12 * depth));
             g.setLineWidth(1);
             g.strokeLine(left, y, right, y);
         }
 
         // Neonowa rama gryfu (poświata + ostra linia) — sygnatura P3R
-        double[] leftTop = laneBoundsAtDepth(0, 0);
-        double[] rightTop = laneBoundsAtDepth(LANES - 1, 0);
+        double leftTop = laneLeftAtDepth(0, 0);
+        double rightTop = laneRightAtDepth(LANES - 1, 0);
         double bx0 = SIDE_MARGIN;
         double bx1 = SIDE_MARGIN + LANES * LANE_WIDTH;
 
         g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA, 0.25));
         g.setLineWidth(6);
-        g.strokeLine(leftTop[0], VANISH_Y, bx0, CANVAS_HEIGHT);
-        g.strokeLine(rightTop[1], VANISH_Y, bx1, CANVAS_HEIGHT);
-        g.strokeLine(leftTop[0], VANISH_Y, rightTop[1], VANISH_Y);
+        g.strokeLine(leftTop, VANISH_Y, bx0, CANVAS_HEIGHT);
+        g.strokeLine(rightTop, VANISH_Y, bx1, CANVAS_HEIGHT);
+        g.strokeLine(leftTop, VANISH_Y, rightTop, VANISH_Y);
 
         g.setStroke(PersonaPalette.AQUA_BRIGHT);
         g.setLineWidth(2.5);
-        g.strokeLine(leftTop[0], VANISH_Y, bx0, CANVAS_HEIGHT);
-        g.strokeLine(rightTop[1], VANISH_Y, bx1, CANVAS_HEIGHT);
-        g.strokeLine(leftTop[0], VANISH_Y, rightTop[1], VANISH_Y);
+        g.strokeLine(leftTop, VANISH_Y, bx0, CANVAS_HEIGHT);
+        g.strokeLine(rightTop, VANISH_Y, bx1, CANVAS_HEIGHT);
+        g.strokeLine(leftTop, VANISH_Y, rightTop, VANISH_Y);
     }
 
     private void drawHitLine(GraphicsContext g) {
@@ -893,16 +895,18 @@ public final class GameScreen {
         return Math.pow(linear, PERSPECTIVE_CURVE);
     }
 
-    /** Lewa i prawa krawędź ścieżki przy danej głębokości (0..1). */
-    private static double[] laneBoundsAtDepth(int lane, double depth) {
+    /** Lewa krawędź ścieżki przy danej głębokości (0..1). */
+    private static double laneLeftAtDepth(int lane, double depth) {
         double topL = vanishLaneLeft(lane);
-        double topR = topL + TOP_LANE_WIDTH;
         double hitL = SIDE_MARGIN + lane * LANE_WIDTH;
+        return topL + (hitL - topL) * depth;
+    }
+
+    /** Prawa krawędź ścieżki przy danej głębokości (0..1). */
+    private static double laneRightAtDepth(int lane, double depth) {
+        double topR = vanishLaneLeft(lane) + TOP_LANE_WIDTH;
         double hitR = SIDE_MARGIN + (lane + 1) * LANE_WIDTH;
-        return new double[]{
-                topL + (hitL - topL) * depth,
-                topR + (hitR - topR) * depth
-        };
+        return topR + (hitR - topR) * depth;
     }
 
     private static double vanishLaneLeft(int lane) {
@@ -932,10 +936,9 @@ public final class GameScreen {
             return null;
         }
 
-        double[] bounds = laneBoundsAtDepth(lane, depth);
         double inset = 4 + 6 * (1 - depth);
-        double left = bounds[0] + inset;
-        double right = bounds[1] - inset;
+        double left = laneLeftAtDepth(lane, depth) + inset;
+        double right = laneRightAtDepth(lane, depth) - inset;
         double width = Math.max(4, right - left);
         double height = NOTE_HEIGHT * (MIN_NOTE_SCALE + (1 - MIN_NOTE_SCALE) * depth);
         double centerX = (left + right) / 2.0;
