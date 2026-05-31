@@ -1,6 +1,6 @@
 # Folder `songs/`
 
-Tutaj wrzucasz pliki audio (`.mp3`, `.wav`, `.aiff`, `.flac`).
+Tutaj wrzucasz pliki audio (`.mp3`, `.wav`, `.aiff`).
 
 Po wygenerowaniu beatmapy obok każdego utworu pojawi się plik `.json`:
 
