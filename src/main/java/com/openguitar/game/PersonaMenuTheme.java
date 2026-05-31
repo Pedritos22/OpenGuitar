@@ -104,6 +104,16 @@ public final class PersonaMenuTheme {
              + "-fx-border-width: 1 1 1 4;";
     }
 
+    /** Wyraźne, trwałe zaznaczenie (mocniejsze niż hover): jasne tło + gruby akcent. */
+    public static String cardRowSelected(boolean ready) {
+        String stripe = ready ? ACCENT_GLOW : PENDING;
+        return "-fx-background-color: linear-gradient(to right,"
+             + " rgba(0, 229, 255, 0.30), rgba(11, 58, 107, 0.45));"
+             + "-fx-border-color: " + ACCENT_GLOW + " " + BORDER_BRIGHT + " "
+             + BORDER_BRIGHT + " " + stripe + ";"
+             + "-fx-border-width: 1 1 1 6;";
+    }
+
     public static String badgeReady() {
         return badgeBase(READY, "rgba(0, 229, 255, 0.12)");
     }
@@ -174,5 +184,19 @@ public final class PersonaMenuTheme {
              + "-fx-border-color: " + BORDER + ";"
              + "-fx-border-width: 1;"
              + "-fx-padding: 24 16 24 16;";
+    }
+
+    /** Panel nakładki z historią podejść. */
+    public static String historyPanel() {
+        return "-fx-background-color: linear-gradient(to bottom, #0a1d3a, #050b16);"
+             + "-fx-border-color: " + BORDER_BRIGHT + " " + BORDER + " " + BORDER + " " + ACCENT + ";"
+             + "-fx-border-width: 1 1 1 4;";
+    }
+
+    /** Pojedynczy wiersz historii; lewy akcent w kolorze rangi. */
+    public static String historyRow(String accentHex) {
+        return "-fx-background-color: " + BG_ROW + ";"
+             + "-fx-border-color: transparent transparent transparent " + accentHex + ";"
+             + "-fx-border-width: 0 0 0 3;";
     }
 }

@@ -47,14 +47,24 @@ public final class MenuScreen {
     private static final double LOGO_H = 48;
     private static final double INDEX_W = 28;
 
+    /** Ile ostatnich podejść pokazujemy w historii. */
+    private static final int HISTORY_LIMIT = 25;
+    private static final java.time.format.DateTimeFormatter HISTORY_DATE =
+            java.time.format.DateTimeFormatter.ofPattern("dd.MM HH:mm")
+                    .withZone(java.time.ZoneId.systemDefault());
+
     private final Path songsDir;
     private final Consumer<SongContext> onSongSelected;
     private final Runnable onExit;
     private final StatsStore stats;
 
     private final Scene scene;
+    private final StackPane root;
     private final VBox songsList;
     private final Label statusLabel;
+
+    /** Nakładka z historią podejść (null = zamknięta). */
+    private StackPane historyOverlay;
 
     /** Uchwyty wierszy do nawigacji klawiaturą (czysto widokowe). */
     private final List<RowHandle> navRows = new ArrayList<>();
@@ -93,7 +103,7 @@ public final class MenuScreen {
         content.setCenter(buildListArea());
         content.setBottom(buildFooter());
 
-        StackPane root = new StackPane(background, content);
+        this.root = new StackPane(background, content);
         this.scene = new Scene(FullscreenScaler.wrap(root, WIDTH, HEIGHT), WIDTH, HEIGHT);
         this.scene.setFill(Color.web(PersonaMenuTheme.BG_DEEP));
         this.scene.setOnKeyPressed(this::handleMenuKey);
@@ -211,6 +221,8 @@ public final class MenuScreen {
     }
 
     private VBox buildFooter() {
+        Button history = toolbarButton("Historia");
+        history.setOnAction(e -> openHistoryForSelection());
         Button refresh = toolbarButton("Odśwież");
         refresh.setOnAction(e -> reload());
         Button exit = toolbarButton("Wyjście");
@@ -219,7 +231,7 @@ public final class MenuScreen {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox actions = new HBox(8, refresh, exit);
+        HBox actions = new HBox(8, history, refresh, exit);
         actions.setAlignment(Pos.CENTER_RIGHT);
 
         HBox bar = new HBox(10, statusLabel, spacer, actions);
@@ -243,6 +255,8 @@ public final class MenuScreen {
         num.setPrefWidth(INDEX_W);
         num.setMaxWidth(INDEX_W);
         num.setAlignment(Pos.CENTER);
+
+        Label rank = rankTile(ready ? entry.context().songId() : null);
 
         Label name = ellipsisLabel(entry.title());
         name.setTextFill(Color.web(PersonaMenuTheme.TEXT));
@@ -279,7 +293,7 @@ public final class MenuScreen {
             ctx[0] = withAbsoluteAudio(entry.context(), entry.audioPath());
         }
 
-        HBox row = new HBox(10, num, info, actions);
+        HBox row = new HBox(10, num, rank, info, actions);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(0, 14, 0, 12));
         row.setMinHeight(54);
@@ -295,10 +309,12 @@ public final class MenuScreen {
         navRows.add(new RowHandle(row, action, ready, slide, songId, entry.title()));
 
         applyRowStyle(row, ready, false);
-        row.setOnMouseEntered(e -> select(rowIndex));
-        row.setOnMouseExited(e -> {
-            if (selectedIndex == rowIndex) deselectCurrent();
-        });
+        // Zaznaczenie ustawia WYŁĄCZNIE klik — dzięki temu można wybrać utwór, a potem
+        // przejechać kursorem po innych wierszach (np. do przycisku „Historia") bez
+        // gubienia wyboru. Najechanie daje tylko chwilowe podświetlenie.
+        row.setOnMouseClicked(e -> select(rowIndex));
+        row.setOnMouseEntered(e -> hoverRow(rowIndex, true));
+        row.setOnMouseExited(e -> hoverRow(rowIndex, false));
 
         action.setOnAction(e -> {
             if (ctx[0] != null) {
@@ -309,6 +325,28 @@ public final class MenuScreen {
         });
 
         return row;
+    }
+
+    /**
+     * Kafelek rangi (litera w foncie Bebas Neue, kolor wg {@link Rank}). Gdy utwór
+     * nie był jeszcze grany — neutralny myślnik. Czyta wyłącznie {@link StatsStore}.
+     */
+    private Label rankTile(String songId) {
+        Label rk = new Label("–");
+        rk.setFont(PersonaFonts.display(30));
+        rk.setMinWidth(34);
+        rk.setPrefWidth(34);
+        rk.setMaxWidth(34);
+        rk.setAlignment(Pos.CENTER);
+        rk.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
+        if (songId != null) {
+            stats.forSong(songId).filter(s -> s.plays > 0).ifPresent(s -> {
+                Rank r = s.rank();
+                rk.setText(r.label());
+                rk.setTextFill(r.color());
+            });
+        }
+        return rk;
     }
 
     // ── przyciski (jeden rozmiar wszędzie) ─────────────────────────────────
@@ -425,9 +463,12 @@ public final class MenuScreen {
         }
         boolean selectedNow = selectedIndex >= 0 && selectedIndex < navRows.size()
                 && navRows.get(selectedIndex).node == row;
-        applyRowStyle(row, true, selectedNow);
         if (selectedNow) {
-            updateStatsPanel(navRows.get(selectedIndex));
+            RowHandle h = navRows.get(selectedIndex);
+            applySelectedStyle(h);
+            updateStatsPanel(h);
+        } else {
+            applyRowStyle(row, true, false);
         }
     }
 
@@ -468,14 +509,53 @@ public final class MenuScreen {
         row.setStyle(hover ? PersonaMenuTheme.cardRowHover(ready) : PersonaMenuTheme.cardRow(ready));
     }
 
+    /** Świecąca poświata wokół zaznaczonego wiersza (jeden wiersz na raz). */
+    private static final DropShadow SELECTION_GLOW = makeSelectionGlow();
+
+    private static DropShadow makeSelectionGlow() {
+        DropShadow glow = new DropShadow();
+        glow.setColor(Color.web(PersonaMenuTheme.ACCENT));
+        glow.setRadius(18);
+        glow.setSpread(0.28);
+        return glow;
+    }
+
+    private void applySelectedStyle(RowHandle h) {
+        h.node.setStyle(PersonaMenuTheme.cardRowSelected(h.ready));
+        h.node.setEffect(SELECTION_GLOW);
+    }
+
+    private void applyUnselectedStyle(RowHandle h) {
+        h.node.setStyle(PersonaMenuTheme.cardRow(h.ready));
+        h.node.setEffect(null);
+    }
+
+    /** Chwilowe podświetlenie najechanego wiersza — nie zmienia zaznaczenia. */
+    private void hoverRow(int index, boolean on) {
+        if (index < 0 || index >= navRows.size() || index == selectedIndex) {
+            return;
+        }
+        RowHandle h = navRows.get(index);
+        applyRowStyle(h.node, h.ready, on);
+    }
+
     // ── nawigacja (czysto widokowa) ─────────────────────────────────────────
 
     private void handleMenuKey(KeyEvent e) {
+        // Gdy otwarta jest historia, klawisze sterują tylko nią.
+        if (historyOverlay != null) {
+            if (e.getCode() == javafx.scene.input.KeyCode.ESCAPE) {
+                closeHistory();
+            }
+            e.consume();
+            return;
+        }
         switch (e.getCode()) {
             case ESCAPE -> onExit.run();
             case DOWN, RIGHT -> moveSelection(1);
             case UP, LEFT -> moveSelection(-1);
             case ENTER, SPACE -> activateSelected();
+            case H -> openHistoryForSelection();
             default -> { /* ignorujemy */ }
         }
     }
@@ -497,7 +577,7 @@ public final class MenuScreen {
         deselectCurrent();
         selectedIndex = index;
         RowHandle h = navRows.get(index);
-        applyRowStyle(h.node, h.ready, true);
+        applySelectedStyle(h);
         h.slide.set(true);
         updateStatsPanel(h);
     }
@@ -508,7 +588,7 @@ public final class MenuScreen {
             return;
         }
         RowHandle h = navRows.get(selectedIndex);
-        applyRowStyle(h.node, h.ready, false);
+        applyUnselectedStyle(h);
         h.slide.set(false);
         selectedIndex = -1;
     }
@@ -517,6 +597,130 @@ public final class MenuScreen {
         if (selectedIndex >= 0 && selectedIndex < navRows.size()) {
             navRows.get(selectedIndex).action.fire();
         }
+    }
+
+    // ── historia podejść (nakładka) ──────────────────────────────────────────
+
+    private void openHistoryForSelection() {
+        if (historyOverlay != null) {
+            return;
+        }
+        if (selectedIndex < 0 || selectedIndex >= navRows.size()) {
+            setStatus("Najpierw wybierz utwór");
+            return;
+        }
+        RowHandle h = navRows.get(selectedIndex);
+        if (h.songId == null) {
+            setStatus("Najpierw wygeneruj mapę dla tego utworu");
+            return;
+        }
+        List<StatsStore.PlayRecord> records = stats.history(h.songId, HISTORY_LIMIT);
+        historyOverlay = buildHistoryOverlay(h.title, records);
+        root.getChildren().add(historyOverlay);
+    }
+
+    private void closeHistory() {
+        if (historyOverlay != null) {
+            root.getChildren().remove(historyOverlay);
+            historyOverlay = null;
+        }
+    }
+
+    private StackPane buildHistoryOverlay(String title, List<StatsStore.PlayRecord> records) {
+        Label heading = new Label("HISTORIA");
+        heading.setFont(PersonaFonts.display(34));
+        heading.setTextFill(Color.web(PersonaMenuTheme.ACCENT));
+
+        Label sub = ellipsisLabel(title != null ? title : "—");
+        sub.setFont(PersonaFonts.label(13));
+        sub.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
+
+        VBox head = new VBox(-2, heading, sub);
+        head.setAlignment(Pos.CENTER_LEFT);
+
+        VBox list = new VBox(6);
+        list.setFillWidth(true);
+        if (records.isEmpty()) {
+            Label empty = new Label("Brak podejść — zagraj ten utwór, by zobaczyć historię.");
+            empty.setWrapText(true);
+            empty.setFont(PersonaMenuTheme.bodyFont(12));
+            empty.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
+            list.getChildren().add(empty);
+        } else {
+            int attempt = records.size();
+            for (StatsStore.PlayRecord rec : records) {
+                list.getChildren().add(historyRow(rec, attempt));
+                attempt--;
+            }
+        }
+
+        ScrollPane scroll = new ScrollPane(list);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setStyle(PersonaMenuTheme.scrollPane());
+        scroll.setPrefHeight(HEIGHT * 0.5);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+
+        Label hint = new Label("ESC — zamknij");
+        hint.setFont(PersonaFonts.body(12));
+        hint.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
+
+        VBox panel = new VBox(12, head, scroll, hint);
+        panel.setPadding(new Insets(20, 22, 16, 22));
+        panel.setMaxWidth(WIDTH - 56);
+        panel.setMaxHeight(HEIGHT - 90);
+        panel.setStyle(PersonaMenuTheme.historyPanel());
+        PersonaMenuFx.slant(heading, -0.16);
+
+        StackPane overlay = new StackPane(panel);
+        StackPane.setAlignment(panel, Pos.CENTER);
+        overlay.setStyle("-fx-background-color: rgba(2, 6, 14, 0.78);");
+        // Kliknięcie poza panelem zamyka; kliknięcie w panel — nie.
+        overlay.setOnMouseClicked(e -> closeHistory());
+        panel.setOnMouseClicked(javafx.event.Event::consume);
+        return overlay;
+    }
+
+    private HBox historyRow(StatsStore.PlayRecord rec, int attempt) {
+        Rank r = rec.rank();
+
+        Label rank = new Label(r.label());
+        rank.setFont(PersonaFonts.display(26));
+        rank.setTextFill(r.color());
+        rank.setMinWidth(30);
+        rank.setAlignment(Pos.CENTER);
+
+        Label score = new Label("#" + attempt + "   " + formatNumber(rec.score) + " pkt");
+        score.setFont(PersonaMenuTheme.labelFont(13));
+        score.setTextFill(Color.web(PersonaMenuTheme.TEXT));
+
+        Label detail = new Label(String.format(
+                "PERFECT %d · GREAT %d · MISS %d · COMBO %d · %.1f%%",
+                rec.perfect, rec.great, rec.misses, rec.maxCombo, rec.accuracy * 100.0));
+        detail.setFont(PersonaMenuTheme.bodyFont(10));
+        detail.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
+
+        VBox info = new VBox(2, score, detail);
+        info.setAlignment(Pos.CENTER_LEFT);
+        info.setMinWidth(0);
+        HBox.setHgrow(info, Priority.ALWAYS);
+
+        Label date = new Label(HISTORY_DATE.format(java.time.Instant.ofEpochMilli(rec.playedAt)));
+        date.setFont(PersonaMenuTheme.bodyFont(10));
+        date.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
+
+        HBox row = new HBox(12, rank, info, date);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(8, 12, 8, 12));
+        row.setStyle(PersonaMenuTheme.historyRow(toHex(r.color())));
+        return row;
+    }
+
+    private static String toHex(Color c) {
+        return String.format("#%02x%02x%02x",
+                (int) Math.round(c.getRed() * 255),
+                (int) Math.round(c.getGreen() * 255),
+                (int) Math.round(c.getBlue() * 255));
     }
 
     /** Widokowy uchwyt wiersza dla nawigacji (węzeł, akcja, stan, animacja, statystyki). */
