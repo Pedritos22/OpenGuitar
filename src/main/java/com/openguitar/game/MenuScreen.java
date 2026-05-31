@@ -12,6 +12,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Slider;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -72,6 +73,7 @@ public final class MenuScreen {
     private final Button[] keyCaps = new Button[GameScreen.LANES];
     private Label countdownValue;
     private Button popupsToggle;
+    private Button hitSfxToggle;
     /** Ścieżka oczekująca na przypisanie klawisza (-1 = brak rebindingu). */
     private int rebindingLane = -1;
 
@@ -235,9 +237,15 @@ public final class MenuScreen {
         Button history = toolbarButton("Historia");
         history.setOnAction(e -> openHistoryForSelection());
         Button refresh = toolbarButton("Odśwież");
-        refresh.setOnAction(e -> reload());
+        refresh.setOnAction(e -> {
+            SoundManager.get().play(SoundManager.Sfx.NAV);
+            reload();
+        });
         Button exit = toolbarButton("Wyjście");
-        exit.setOnAction(e -> onExit.run());
+        exit.setOnAction(e -> {
+            SoundManager.get().play(SoundManager.Sfx.BACK);
+            onExit.run();
+        });
 
         HBox actions = new HBox(8, settings, history, refresh, exit);
         actions.setAlignment(Pos.CENTER_RIGHT);
@@ -589,7 +597,10 @@ public final class MenuScreen {
             return;
         }
         switch (e.getCode()) {
-            case ESCAPE -> onExit.run();
+            case ESCAPE -> {
+                SoundManager.get().play(SoundManager.Sfx.BACK);
+                onExit.run();
+            }
             case DOWN, RIGHT -> moveSelection(1);
             case UP, LEFT -> moveSelection(-1);
             case ENTER, SPACE -> activateSelected();
@@ -605,10 +616,14 @@ public final class MenuScreen {
         int next = (selectedIndex < 0)
                 ? (delta > 0 ? 0 : navRows.size() - 1)
                 : Math.floorMod(selectedIndex + delta, navRows.size());
-        select(next);
+        select(next, SoundManager.Sfx.NAV);
     }
 
     private void select(int index) {
+        select(index, SoundManager.Sfx.CLICK_GLASS);
+    }
+
+    private void select(int index, SoundManager.Sfx sfx) {
         if (index < 0 || index >= navRows.size() || index == selectedIndex) {
             return;
         }
@@ -618,6 +633,7 @@ public final class MenuScreen {
         applySelectedStyle(h);
         h.slide.set(true);
         updateStatsPanel(h);
+        SoundManager.get().play(sfx);
     }
 
     private void deselectCurrent() {
@@ -633,6 +649,7 @@ public final class MenuScreen {
 
     private void activateSelected() {
         if (selectedIndex >= 0 && selectedIndex < navRows.size()) {
+            SoundManager.get().play(SoundManager.Sfx.CONFIRM);
             navRows.get(selectedIndex).action.fire();
         }
     }
@@ -655,12 +672,14 @@ public final class MenuScreen {
         List<StatsStore.PlayRecord> records = stats.history(h.songId, HISTORY_LIMIT);
         historyOverlay = buildHistoryOverlay(h.title, records);
         root.getChildren().add(historyOverlay);
+        SoundManager.get().play(SoundManager.Sfx.CONFIRM);
     }
 
     private void closeHistory() {
         if (historyOverlay != null) {
             root.getChildren().remove(historyOverlay);
             historyOverlay = null;
+            SoundManager.get().play(SoundManager.Sfx.BACK);
         }
     }
 
@@ -770,6 +789,7 @@ public final class MenuScreen {
         rebindingLane = -1;
         settingsOverlay = buildSettingsOverlay();
         root.getChildren().add(settingsOverlay);
+        SoundManager.get().play(SoundManager.Sfx.CONFIRM);
     }
 
     private void closeSettings() {
@@ -778,6 +798,7 @@ public final class MenuScreen {
             root.getChildren().remove(settingsOverlay);
             settingsOverlay = null;
             rebindingLane = -1;
+            SoundManager.get().play(SoundManager.Sfx.BACK);
         }
     }
 
@@ -786,6 +807,7 @@ public final class MenuScreen {
         if (rebindingLane >= 0) {
             if (e.getCode() != KeyCode.ESCAPE) {
                 GameSettings.get().setLaneKey(rebindingLane, e.getCode());
+                SoundManager.get().play(SoundManager.Sfx.CONFIRM);
             }
             rebindingLane = -1;
             refreshKeyCaps();
@@ -804,7 +826,7 @@ public final class MenuScreen {
         heading.setTextFill(Color.web(PersonaMenuTheme.ACCENT));
         PersonaMenuFx.slant(heading, -0.16);
 
-        Label sub = new Label("Sterowanie i rozgrywka");
+        Label sub = new Label("Sterowanie, dźwięk i rozgrywka");
         sub.setFont(PersonaFonts.label(13));
         sub.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
 
@@ -813,10 +835,15 @@ public final class MenuScreen {
 
         VBox body = new VBox(10,
                 sectionCaption("STEROWANIE — KLAWISZE ŚCIEŻEK"));
+        body.setFillWidth(true);
         for (int lane = 0; lane < GameScreen.LANES; lane++) {
             body.getChildren().add(keyBindingRow(lane));
         }
         body.getChildren().addAll(
+                sectionCaption("DŹWIĘK"),
+                lobbyVolumeRow(),
+                songVolumeRow(),
+                hitSfxRow(),
                 sectionCaption("ROZGRYWKA"),
                 countdownRow(),
                 popupsRow());
@@ -825,10 +852,21 @@ public final class MenuScreen {
         hint.setFont(PersonaFonts.body(12));
         hint.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
 
-        VBox panel = new VBox(14, head, body, hint);
+        ScrollPane scroll = new ScrollPane(body);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scroll.setStyle(PersonaMenuTheme.scrollPane());
+        scroll.setPrefViewportHeight(HEIGHT * 0.52);
+        scroll.setMaxHeight(HEIGHT * 0.58);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+
+        VBox panel = new VBox(12, head, scroll, hint);
         panel.setPadding(new Insets(20, 22, 16, 22));
+        panel.setFillWidth(true);
         panel.setMaxWidth(WIDTH - 56);
-        panel.setMaxHeight(HEIGHT - 90);
+        panel.setPrefWidth(WIDTH - 56);
+        panel.setMaxHeight(HEIGHT - 72);
         panel.setStyle(PersonaMenuTheme.settingsPanel());
 
         StackPane overlay = new StackPane(panel);
@@ -880,6 +918,7 @@ public final class MenuScreen {
     private void startRebind(int lane) {
         rebindingLane = lane;
         refreshKeyCaps();
+        SoundManager.get().play(SoundManager.Sfx.CLICK_GLASS);
     }
 
     private void refreshKeyCaps() {
@@ -892,6 +931,88 @@ public final class MenuScreen {
             cap.setText(listening ? "..." : GameSettings.get().laneKey(i).getName());
             cap.setStyle(PersonaMenuTheme.keyCap(listening));
         }
+    }
+
+    private VBox volumeSliderRow(String title, int initialPercent, java.util.function.IntConsumer onVolumeChange) {
+        GameSettings settings = GameSettings.get();
+
+        Label name = new Label(title);
+        name.setFont(PersonaMenuTheme.labelFont(13));
+        name.setTextFill(Color.web(PersonaMenuTheme.TEXT));
+        HBox.setHgrow(name, Priority.ALWAYS);
+        name.setMinWidth(0);
+
+        Label pct = new Label(initialPercent + "%");
+        pct.setFont(PersonaMenuTheme.labelFont(13));
+        pct.setTextFill(Color.web(PersonaMenuTheme.ACCENT_GLOW));
+        pct.setMinWidth(44);
+        pct.setAlignment(Pos.CENTER_RIGHT);
+
+        HBox header = new HBox(12, name, pct);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        Slider slider = new Slider(GameSettings.VOLUME_MIN, GameSettings.VOLUME_MAX, initialPercent);
+        slider.setBlockIncrement(1);
+        slider.setSnapToTicks(false);
+        slider.setStyle(PersonaMenuTheme.volumeSlider());
+        slider.setMaxWidth(Double.MAX_VALUE);
+
+        slider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            int v = newVal.intValue();
+            pct.setText(v + "%");
+            onVolumeChange.accept(v);
+        });
+        slider.setOnMouseReleased(e -> SoundManager.get().play(SoundManager.Sfx.NAV));
+
+        VBox row = new VBox(8, header, slider);
+        row.setFillWidth(true);
+        row.setStyle(PersonaMenuTheme.settingRow());
+        return row;
+    }
+
+    private VBox lobbyVolumeRow() {
+        GameSettings s = GameSettings.get();
+        return volumeSliderRow("Głośność muzyki lobby", s.lobbyMusicVolume(), v -> {
+            s.setLobbyMusicVolume(v);
+            SoundManager.get().refreshLobbyVolume();
+        });
+    }
+
+    private VBox songVolumeRow() {
+        GameSettings s = GameSettings.get();
+        return volumeSliderRow("Głośność piosenek", s.songMusicVolume(), s::setSongMusicVolume);
+    }
+
+    private HBox hitSfxRow() {
+        Label name = new Label("Dźwięki trafień w grze");
+        name.setFont(PersonaMenuTheme.labelFont(13));
+        name.setTextFill(Color.web(PersonaMenuTheme.TEXT));
+        HBox.setHgrow(name, Priority.ALWAYS);
+        name.setMinWidth(0);
+        name.setMaxWidth(Double.MAX_VALUE);
+
+        hitSfxToggle = stepper(null);
+        hitSfxToggle.setMinWidth(64);
+        hitSfxToggle.setPrefWidth(64);
+        updateHitSfxToggle();
+        hitSfxToggle.setOnAction(e -> {
+            GameSettings s = GameSettings.get();
+            s.setGameplayHitSfx(!s.gameplayHitSfx());
+            updateHitSfxToggle();
+            SoundManager.get().play(SoundManager.Sfx.NAV);
+            if (s.gameplayHitSfx()) {
+                SoundManager.get().playGameplay(SoundManager.Sfx.GREAT);
+            }
+        });
+
+        HBox row = new HBox(12, name, hitSfxToggle);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setStyle(PersonaMenuTheme.settingRow());
+        return row;
+    }
+
+    private void updateHitSfxToggle() {
+        hitSfxToggle.setText(GameSettings.get().gameplayHitSfx() ? "Wł." : "Wył.");
     }
 
     private HBox countdownRow() {
@@ -927,6 +1048,7 @@ public final class MenuScreen {
         GameSettings s = GameSettings.get();
         s.setCountdownSeconds(s.countdownSeconds() + delta);
         updateCountdownValue();
+        SoundManager.get().play(SoundManager.Sfx.NAV);
     }
 
     private void updateCountdownValue() {
@@ -950,6 +1072,7 @@ public final class MenuScreen {
             GameSettings s = GameSettings.get();
             s.setShowHitPopups(!s.showHitPopups());
             updatePopupsToggle();
+            SoundManager.get().play(SoundManager.Sfx.NAV);
         });
 
         HBox row = new HBox(12, name, popupsToggle);

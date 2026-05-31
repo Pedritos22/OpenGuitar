@@ -3,7 +3,7 @@
 [![Java](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Maven](https://img.shields.io/badge/Maven-3.9+-C71A36?logo=apachemaven&logoColor=white)](https://maven.apache.org/)
 [![JavaFX](https://img.shields.io/badge/JavaFX-21-FF6A00?logo=java&logoColor=white)](https://openjfx.io/)
-[![Tests](https://img.shields.io/badge/Tests-36-25A162?logo=junit5&logoColor=white)](DOCUMENTATION.md#11-testy)
+[![Tests](https://img.shields.io/badge/Tests-36-25A162?logo=junit5&logoColor=white)](DOCUMENTATION.md#12-testy)
 [![GitHub](https://img.shields.io/badge/GitHub-OpenGuitar-181717?logo=github)](https://github.com/Pedritos22/OpenGuitar)
 
 Klon **Guitar Hero** na desktop — Java 21, Maven, JavaFX. Projekt akademicki składający się z dwóch modułów:
@@ -11,7 +11,7 @@ Klon **Guitar Hero** na desktop — Java 21, Maven, JavaFX. Projekt akademicki s
 | Moduł | Pakiet | Odpowiedzialność |
 |-------|--------|------------------|
 | **Beatmapa** | `com.openguitar.beatmap` | Analiza audio (DSP), generowanie nut, zapis JSON |
-| **Gra** | `com.openguitar.game` | Menu, rozgrywka, hit detection, statystyki, UI |
+| **Gra** | `com.openguitar.game` | Menu, rozgrywka, hit detection, statystyki, dźwięk, UI |
 
 Interfejs inspirowany estetyką **Persona 3 Reload** (P3R): ukośne panele, neonowy błękit, fonty Bebas Neue + Rajdhani, kryształowe nuty na perspektywicznej autostradzie.
 
@@ -61,8 +61,20 @@ Po zakończeniu utworu wyświetla się **animowany ekran wyników** (PERFECT / G
 - **Statystyki** — panel u góry pokazuje dane wybranego utworu (podejścia, rekord, combo).
 - **Ranga** — litera S–E obok tytułu (najlepszy wynik).
 - **Historia** — ostatnie podejścia dla zaznaczonego utworu (przycisk lub klawisz **H**).
-- **⚙ Ustawienia** — przypisanie klawiszy, odliczanie, komunikaty trafień.
+- **⚙ Ustawienia** — klawisze ścieżek, głośność, dźwięki trafień, odliczanie, komunikaty wizualne (panel przewijany).
 - **Odśwież** — ponowny skan folderu `songs/`.
+
+### Dźwięk
+
+| Kontekst | Co słychać |
+|----------|------------|
+| **Menu (lobby)** | Losowa rotacja `song_lobby` / `song_ending` z płynnym crossfade'm |
+| **Gra** | Odtwarzany utwór z folderu `songs/` (głośność w ustawieniach) |
+| **Wyniki** | `song_ending` w pętli |
+| **UI** | Szklane kliki, nawigacja, odliczanie, pauza |
+| **Trafienia** | Dźwięki PERFECT/GREAT/MISS/combo (można wyłączyć w ustawieniach) |
+
+Głośność lobby i piosenek regulujesz suwakami w **⚙ Ustawienia → DŹWIĘK**.
 
 ---
 
@@ -93,7 +105,7 @@ Te pliki powstają obok repozytorium podczas gry i **nie są commitowane** (patr
 | Plik | Opis |
 |------|------|
 | `stats.db` | Statystyki i historia podejść (SQLite) |
-| `settings.properties` | Klawisze ścieżek, odliczanie, opcje UI |
+| `settings.properties` | Klawisze, głośność, dźwięki, odliczanie, opcje UI |
 | `songs/*.json` | Beatmapy — **można** commitować, jeśli chcesz się nimi dzielić |
 | `songs/*.{mp3,wav,...}` | Audio użytkownika — **nie commituj** (rozmiar, prawa autorskie) |
 
@@ -110,13 +122,20 @@ OpenGuitar/
 ├── src/main/java/
 │   ├── com/openguitar/beatmap/   # silnik analizy audio
 │   └── com/openguitar/game/     # aplikacja JavaFX
-├── src/main/resources/fonts/     # Bebas Neue, Rajdhani (OFL)
+├── src/main/resources/
+│   ├── fonts/                    # Bebas Neue, Rajdhani (OFL)
+│   ├── images/                   # logo menu
+│   └── sound/                    # muzyka lobby + SFX (Kenney CC0)
 ├── README.md                     # ten plik
 └── DOCUMENTATION.md              # dokumentacja techniczna
 ```
 
 ---
 
-## Licencje fontów
+## Licencje zasobów
 
-Fonty w `src/main/resources/fonts/` pochodzą z Google Fonts i są na licencji **SIL Open Font License** — szczegóły w plikach `OFL-*.txt`.
+| Zasób | Licencja |
+|-------|----------|
+| Fonty (`src/main/resources/fonts/`) | **SIL Open Font License** — szczegóły w `OFL-*.txt` |
+| Efekty UI (`src/main/resources/sound/sfx_*.wav`) | **CC0** — pakiet [Kenney UI Audio](https://kenney.nl/assets/ui-audio); patrz `KENNEY_UI_AUDIO_LICENSE.txt` |
+| Muzyka lobby (`song_lobby.mp3`, `song_ending.mp3`) | Pliki projektu w repozytorium |

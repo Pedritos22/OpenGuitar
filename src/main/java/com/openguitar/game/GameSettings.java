@@ -18,7 +18,9 @@ import java.util.logging.Logger;
  * <ul>
  *   <li>przypisanie klawiszy do czterech ścieżek (domyślnie D / F / J / K),</li>
  *   <li>długość odliczania przed startem utworu (0 = wyłączone),</li>
- *   <li>przełącznik animowanych komunikatów trafień (PERFECT/GREAT/MISS).</li>
+ *   <li>przełącznik animowanych komunikatów trafień (PERFECT/GREAT/MISS),</li>
+ *   <li>głośność muzyki lobby i utworów w grze,</li>
+ *   <li>przełącznik dźwięków trafień podczas rozgrywki.</li>
  * </ul>
  *
  * Singleton — wczytywany leniwie, zapisywany jawnie przez {@link #save()}.
@@ -35,6 +37,9 @@ public final class GameSettings {
     public static final int COUNTDOWN_MIN = 0;
     public static final int COUNTDOWN_MAX = 5;
 
+    public static final int VOLUME_MIN = 0;
+    public static final int VOLUME_MAX = 100;
+
     private static final KeyCode[] DEFAULT_KEYS = {
             KeyCode.D, KeyCode.F, KeyCode.J, KeyCode.K
     };
@@ -44,6 +49,12 @@ public final class GameSettings {
     private final KeyCode[] laneKeys = DEFAULT_KEYS.clone();
     private int countdownSeconds = 3;
     private boolean showHitPopups = true;
+    /** Głośność muzyki menu / wyników (0–100). */
+    private int lobbyMusicVolume = 100;
+    /** Głośność odtwarzanego utworu w grze (0–100). */
+    private int songMusicVolume = 100;
+    /** Dźwięki trafień (PERFECT/GREAT/MISS/combo) podczas gry. */
+    private boolean gameplayHitSfx = true;
 
     private GameSettings() {}
 
@@ -75,6 +86,30 @@ public final class GameSettings {
         return showHitPopups;
     }
 
+    public int lobbyMusicVolume() {
+        return lobbyMusicVolume;
+    }
+
+    public int songMusicVolume() {
+        return songMusicVolume;
+    }
+
+    public boolean gameplayHitSfx() {
+        return gameplayHitSfx;
+    }
+
+    public double lobbyMusicVolumeScale() {
+        return volumeScale(lobbyMusicVolume);
+    }
+
+    public double songMusicVolumeScale() {
+        return volumeScale(songMusicVolume);
+    }
+
+    private static double volumeScale(int percent) {
+        return Math.max(VOLUME_MIN, Math.min(VOLUME_MAX, percent)) / 100.0;
+    }
+
     // ── settery (bez zapisu — wołaj save() po edycji) ─────────────────────────
 
     /**
@@ -102,6 +137,30 @@ public final class GameSettings {
         showHitPopups = show;
     }
 
+    public void setLobbyMusicVolume(int percent) {
+        lobbyMusicVolume = clampVolume(percent);
+    }
+
+    public void setSongMusicVolume(int percent) {
+        songMusicVolume = clampVolume(percent);
+    }
+
+    public void setGameplayHitSfx(boolean enabled) {
+        gameplayHitSfx = enabled;
+    }
+
+    public void adjustLobbyMusicVolume(int delta) {
+        setLobbyMusicVolume(lobbyMusicVolume + delta);
+    }
+
+    public void adjustSongMusicVolume(int delta) {
+        setSongMusicVolume(songMusicVolume + delta);
+    }
+
+    private static int clampVolume(int percent) {
+        return Math.max(VOLUME_MIN, Math.min(VOLUME_MAX, percent));
+    }
+
     // ── trwałość ──────────────────────────────────────────────────────────────
 
     private void load() {
@@ -125,6 +184,12 @@ public final class GameSettings {
                 COUNTDOWN_MIN, COUNTDOWN_MAX);
         showHitPopups = Boolean.parseBoolean(
                 p.getProperty("popups.hits", Boolean.toString(showHitPopups)));
+        lobbyMusicVolume = parseInt(p.getProperty("audio.lobby.volume"), lobbyMusicVolume,
+                VOLUME_MIN, VOLUME_MAX);
+        songMusicVolume = parseInt(p.getProperty("audio.song.volume"), songMusicVolume,
+                VOLUME_MIN, VOLUME_MAX);
+        gameplayHitSfx = Boolean.parseBoolean(
+                p.getProperty("audio.gameplay.sfx", Boolean.toString(gameplayHitSfx)));
         dedupeKeys();
     }
 
@@ -136,6 +201,9 @@ public final class GameSettings {
         }
         p.setProperty("countdown.seconds", Integer.toString(countdownSeconds));
         p.setProperty("popups.hits", Boolean.toString(showHitPopups));
+        p.setProperty("audio.lobby.volume", Integer.toString(lobbyMusicVolume));
+        p.setProperty("audio.song.volume", Integer.toString(songMusicVolume));
+        p.setProperty("audio.gameplay.sfx", Boolean.toString(gameplayHitSfx));
         try (OutputStream out = Files.newOutputStream(FILE)) {
             p.store(out, "OpenGuitar — ustawienia użytkownika");
         } catch (Exception ex) {
@@ -171,7 +239,19 @@ public final class GameSettings {
         for (int i = 0; i < laneKeys.length; i++) {
             for (int j = i + 1; j < laneKeys.length; j++) {
                 if (laneKeys[i] == laneKeys[j]) {
-                    laneKeys[j] = DEFAULT_KEYS[j];
+                    for (KeyCode fallback : DEFAULT_KEYS) {
+                        boolean used = false;
+                        for (int k = 0; k <= i; k++) {
+                            if (laneKeys[k] == fallback) {
+                                used = true;
+                                break;
+                            }
+                        }
+                        if (!used) {
+                            laneKeys[j] = fallback;
+                            break;
+                        }
+                    }
                 }
             }
         }

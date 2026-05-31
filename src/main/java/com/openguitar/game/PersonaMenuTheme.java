@@ -236,6 +236,14 @@ public final class PersonaMenuTheme {
         return rowButtonOutline(ACCENT_GLOW, BORDER);
     }
 
+    /** Suwak głośności w stylu P3R (akcent cyjanowy). */
+    public static String volumeSlider() {
+        return "-fx-accent: " + ACCENT + ";"
+             + "-fx-background-color: transparent;"
+             + "-fx-padding: 0;"
+             + "-fx-control-inner-background: " + BG_PANEL + ";";
+    }
+
     /** Przycisk z ikoną zębatki (font systemowy, by glif na pewno się renderował). */
     public static String gearButton() {
         return "-fx-background-color: rgba(0, 212, 255, 0.06);"
