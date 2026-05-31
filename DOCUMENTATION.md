@@ -49,7 +49,7 @@ Ten dokument opisuje architekturę, algorytmy i konwencje projektu. Do szybkiego
 ### Pipeline
 
 ```
-audio (.wav / .mp3 / .aiff / .flac)
+audio (.wav / .mp3 / .aiff)
         │
         ▼
  BeatmapEngine ── TarsosDSP ComplexOnsetDetector ──► [onsetTimesMs]
