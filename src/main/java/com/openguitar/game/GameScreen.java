@@ -149,6 +149,12 @@ public final class GameScreen {
     private long comboPopNanos = -HUD_POP_NANOS;
     private long multPopNanos = -HUD_POP_NANOS;
 
+    // Ekran wyników (animowany, w stylu P3R). Pętla renderująca działa dalej,
+    // by animować wjazd paneli, „count-up” liczb i stempel rangi.
+    private boolean showingResults = false;
+    private long resultsStartNanos = 0;
+    private GameResult result;
+
     // ---------- konstrukcja ----------
 
     public GameScreen(SongContext context, Consumer<GameResult> onFinished, Runnable onQuit) {
@@ -233,7 +239,13 @@ public final class GameScreen {
     // ---------- pętla gry ----------
 
     private void tick(long nowNanos) {
-        if (finished) return;
+        if (finished) {
+            // Po zakończeniu utworu pętla żyje tylko po to, by animować ekran wyników.
+            if (showingResults) {
+                render(nowNanos);
+            }
+            return;
+        }
 
         // W pauzie zamrażamy stan gry: nie przesuwamy czasu, nie naliczamy MISS-ów,
         // nie wygaszamy popupów. Rysujemy wciąż scenę + nakładkę pauzy.
@@ -278,6 +290,12 @@ public final class GameScreen {
     // ---------- input ----------
 
     private void handleKeyPressed(KeyCode key) {
+        if (showingResults) {
+            if (key == KeyCode.ENTER || key == KeyCode.SPACE || key == KeyCode.ESCAPE) {
+                finishResults();
+            }
+            return;
+        }
         if (paused) {
             handlePauseKey(key);
             return;
@@ -470,6 +488,11 @@ public final class GameScreen {
     private void render(long nowNanos) {
         GraphicsContext g = canvas.getGraphicsContext2D();
 
+        if (showingResults) {
+            drawResults(g, nowNanos);
+            return;
+        }
+
         drawBackground(g);
 
         drawLanes(g, nowNanos);
@@ -543,6 +566,167 @@ public final class GameScreen {
         PersonaText.plain(g, "↑/↓  wybór      ENTER  zatwierdź      ESC  wznów",
                 CANVAS_WIDTH / 2.0, CANVAS_HEIGHT * 0.52 + PAUSE_OPTIONS.length * 70 + 24,
                 PersonaFonts.body(13), PersonaPalette.MUTED, TextAlignment.CENTER);
+    }
+
+    // ---------- ekran wyników (animowany, P3R) ----------
+
+    /**
+     * Rysuje animowany ekran wyników: wjazd ukośnych paneli, „count-up” liczb
+     * (PERFECT/GREAT/MISS, max combo, celność, wynik) i stempel rangi. Czyta tylko
+     * gotowy {@link GameResult} — nie dotyka logiki gry.
+     */
+    private void drawResults(GraphicsContext g, long nowNanos) {
+        if (result == null) {
+            finishResults();
+            return;
+        }
+        double el = (nowNanos - resultsStartNanos) / 1_000_000_000.0;
+
+        g.setFill(BG_GRADIENT);
+        g.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        g.setFill(PersonaPalette.alpha(PersonaPalette.BLACK, 0.5));
+        g.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // ── nagłówek (ukośny pas + tytuł, wjazd z góry) ──
+        double head = easeOut(clamp01(el / 0.4));
+        double bandY = 86 - (1 - head) * 50;
+        g.setFill(PersonaPalette.alpha(PersonaPalette.DEEP_BLUE, 0.92 * head));
+        g.fillPolygon(
+                new double[]{0, CANVAS_WIDTH, CANVAS_WIDTH, 0},
+                new double[]{bandY - 30, bandY - 50, bandY + 40, bandY + 60}, 4);
+        g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA_BRIGHT, head));
+        g.setLineWidth(2);
+        g.strokeLine(0, bandY - 50, CANVAS_WIDTH, bandY - 50 + 90);
+        g.strokeLine(0, bandY + 60, CANVAS_WIDTH, bandY + 60 - 90);
+        PersonaText.draw(g, "WYNIKI", CANVAS_WIDTH / 2.0, bandY + 18,
+                PersonaFonts.display(52), PersonaPalette.alpha(PersonaPalette.WHITE, head),
+                PersonaPalette.alpha(PersonaPalette.BLACK, head), 4,
+                PersonaPalette.alpha(PersonaPalette.AQUA, 0.5 * head),
+                PersonaText.SLANT, TextAlignment.CENTER);
+        PersonaText.plain(g, context.title(), CANVAS_WIDTH / 2.0, bandY + 46,
+                PersonaFonts.label(12), PersonaPalette.alpha(PersonaPalette.WHITE_DIM, head),
+                TextAlignment.CENTER);
+
+        // ── wiersze statystyk (staggered count-up) ──
+        drawResultRow(g, 346, "PERFECT", String.valueOf(countUp(result.perfect(), el, 0.20)),
+                PersonaPalette.PERFECT, el, 0.20);
+        drawResultRow(g, 386, "GREAT", String.valueOf(countUp(result.great(), el, 0.34)),
+                PersonaPalette.GREAT, el, 0.34);
+        drawResultRow(g, 426, "MISS", String.valueOf(countUp(result.misses(), el, 0.48)),
+                PersonaPalette.MISS, el, 0.48);
+        drawResultRow(g, 466, "MAX COMBO", String.valueOf(countUp(result.maxCombo(), el, 0.62)),
+                PersonaPalette.COMBO, el, 0.62);
+        double accShown = result.accuracy() * 100.0 * clamp01((el - 0.76) / 0.6);
+        drawResultRow(g, 506, "CELNOŚĆ", String.format("%.1f%%", accShown),
+                PersonaPalette.AQUA, el, 0.76);
+
+        // ── wynik (duży) ──
+        double sp = clamp01((el - 0.9) / 0.5);
+        if (sp > 0) {
+            PersonaText.plain(g, "WYNIK", CANVAS_WIDTH / 2.0, 562, PersonaFonts.label(13),
+                    PersonaPalette.alpha(PersonaPalette.AQUA, easeOut(sp)), TextAlignment.CENTER);
+            int shownScoreVal = (int) Math.round(result.totalScore() * sp);
+            PersonaText.draw(g, formatScore(shownScoreVal), CANVAS_WIDTH / 2.0, 612,
+                    PersonaFonts.display(54), PersonaPalette.WHITE, PersonaPalette.BLACK, 3,
+                    PersonaPalette.alpha(PersonaPalette.AQUA, 0.5), PersonaText.SLANT,
+                    TextAlignment.CENTER);
+        }
+
+        // ── stempel rangi ──
+        drawRankStamp(g, el);
+
+        // ── podpowiedź ──
+        if (el > 1.8) {
+            double blink = 0.5 + 0.5 * Math.sin(nowNanos / 300_000_000.0);
+            PersonaText.plain(g, "ENTER — powrót do menu", CANVAS_WIDTH / 2.0, 694,
+                    PersonaFonts.body(13),
+                    PersonaPalette.alpha(PersonaPalette.WHITE_DIM, 0.4 + 0.6 * blink),
+                    TextAlignment.CENTER);
+        }
+    }
+
+    /** Pojedynczy ukośny wiersz statystyki z wjazdem z lewej i policzonym wynikiem. */
+    private static void drawResultRow(GraphicsContext g, double y, String label, String value,
+                                      Color color, double el, double delay) {
+        double ap = easeOut(clamp01((el - delay) / 0.35));
+        if (ap <= 0) {
+            return;
+        }
+        double l = 72;
+        double r = 428;
+        double h = 32;
+        double s = 11;
+        double dx = (1 - ap) * -26;
+        double top = y - h / 2;
+        double bot = y + h / 2;
+        double[] xs = {l + s + dx, r + s + dx, r + dx, l + dx};
+        double[] ys = {top, top, bot, bot};
+
+        g.setFill(PersonaPalette.alpha(PersonaPalette.NAVY, 0.82 * ap));
+        g.fillPolygon(xs, ys, 4);
+        g.setStroke(PersonaPalette.alpha(color, 0.55 * ap));
+        g.setLineWidth(1.5);
+        g.strokePolygon(xs, ys, 4);
+        g.setStroke(PersonaPalette.alpha(color, ap));
+        g.setLineWidth(3);
+        g.strokeLine(l + s + dx, top, l + dx, bot);
+
+        PersonaText.draw(g, label, l + 22 + dx, y + 6, PersonaFonts.label(15),
+                PersonaPalette.alpha(PersonaPalette.WHITE_DIM, ap), null, 0, null,
+                PersonaText.SLANT, TextAlignment.LEFT);
+        PersonaText.draw(g, value, r - 12 + dx, y + 9, PersonaFonts.display(24),
+                PersonaPalette.alpha(color, ap), PersonaPalette.alpha(PersonaPalette.BLACK, ap), 2,
+                null, PersonaText.SLANT, TextAlignment.RIGHT);
+    }
+
+    /** Stempel rangi: pierścień + wielka litera ze skalą „overshoot”. */
+    private void drawRankStamp(GraphicsContext g, double el) {
+        double rp = clamp01((el - 1.30) / 0.5);
+        if (rp <= 0) {
+            return;
+        }
+        double scale = 0.3 + 0.7 * easeOutBack(rp);
+        double cx = CANVAS_WIDTH / 2.0;
+        double cy = 232;
+        double ringR = 78;
+        Rank rank = result.rank();
+        double a = Math.min(1, rp);
+
+        g.setFill(rank.color(0.10 * a));
+        g.fillOval(cx - ringR, cy - ringR, ringR * 2, ringR * 2);
+        g.setStroke(rank.color(0.85 * a));
+        g.setLineWidth(4);
+        g.strokeOval(cx - ringR, cy - ringR, ringR * 2, ringR * 2);
+
+        g.save();
+        g.translate(cx, cy);
+        g.scale(scale, scale);
+        PersonaText.draw(g, rank.label(), 0, 48, PersonaFonts.display(140),
+                rank.color(), PersonaPalette.BLACK, 6, rank.color(0.5),
+                PersonaText.SLANT, TextAlignment.CENTER);
+        g.restore();
+
+        PersonaText.plain(g, "RANGA", cx, cy + 100, PersonaFonts.label(12),
+                PersonaPalette.alpha(PersonaPalette.WHITE_DIM, a), TextAlignment.CENTER);
+    }
+
+    private static int countUp(int target, double el, double delay) {
+        return (int) Math.round(target * clamp01((el - delay) / 0.6));
+    }
+
+    private static double clamp01(double v) {
+        return v < 0 ? 0 : (Math.min(v, 1));
+    }
+
+    private static double easeOut(double t) {
+        return 1 - (1 - t) * (1 - t);
+    }
+
+    private static double easeOutBack(double t) {
+        double c1 = 1.70158;
+        double c3 = c1 + 1;
+        double u = t - 1;
+        return 1 + c3 * u * u * u + c1 * u * u;
     }
 
     private void drawPopups(GraphicsContext g, long nowNanos) {
@@ -806,21 +990,57 @@ public final class GameScreen {
         g.setFill(PersonaPalette.AQUA_BRIGHT);
         g.fillRect(Math.max(0, CANVAS_WIDTH * prog - 2), 0, 3, 6);
 
-        // ── pasek tytułu (dół, ukośny) ──
+        // ── pasek tytułu + postęp utworu (dół, ukośny) ──
         double barW = Math.min(360, CANVAS_WIDTH - 40);
         double barX = (CANVAS_WIDTH - barW) / 2.0;
         double barY = CANVAS_HEIGHT - 36;
+        double barH = 28;
         double bs = 10;
         double[] bxs = {barX + bs, barX + barW + bs, barX + barW, barX};
-        double[] bys = {barY, barY, barY + 28, barY + 28};
+        double[] bys = {barY, barY, barY + barH, barY + barH};
+
         g.setFill(PersonaPalette.alpha(PersonaPalette.NAVY, 0.9));
         g.fillPolygon(bxs, bys, 4);
+
+        // Wypełnienie postępu — przycięte do kształtu paska (rośnie wraz z utworem).
+        g.save();
+        g.beginPath();
+        g.moveTo(bxs[0], bys[0]);
+        g.lineTo(bxs[1], bys[1]);
+        g.lineTo(bxs[2], bys[2]);
+        g.lineTo(bxs[3], bys[3]);
+        g.closePath();
+        g.clip();
+        g.setFill(PersonaPalette.alpha(PersonaPalette.AQUA, 0.22));
+        g.fillRect(barX, barY, barW * prog + bs, barH);
+        g.restore();
+
         g.setStroke(PersonaPalette.alpha(PersonaPalette.AQUA, 0.55));
         g.setLineWidth(1);
         g.strokeLine(barX + bs, barY, barX + barW + bs, barY);
-        PersonaText.plain(g, context.title() + "   ·   " + context.bpm() + " BPM",
-                CANVAS_WIDTH / 2.0, barY + 19, PersonaFonts.label(12),
-                PersonaPalette.WHITE_DIM, TextAlignment.CENTER);
+
+        // Linia postępu wzdłuż dolnej krawędzi + jasny znacznik czoła.
+        g.setFill(PersonaPalette.AQUA);
+        g.fillRect(barX, barY + barH - 2, barW * prog, 2);
+        g.setFill(PersonaPalette.AQUA_BRIGHT);
+        g.fillRect(barX + barW * prog - 1, barY + barH - 4, 2, 5);
+
+        PersonaText.plain(g, truncate(context.title(), 22), barX + bs + 12, barY + 19,
+                PersonaFonts.label(12), PersonaPalette.WHITE_DIM, TextAlignment.LEFT);
+        PersonaText.plain(g, formatTime(currentTimeMs) + " / " + formatTime(songEndTimeMs),
+                barX + barW - 12, barY + 19, PersonaFonts.label(12),
+                PersonaPalette.AQUA_BRIGHT, TextAlignment.RIGHT);
+    }
+
+    /** Formatuje czas (ms) jako {@code m:ss}. */
+    private static String formatTime(double ms) {
+        int total = (int) Math.max(0, ms / 1000.0);
+        return total / 60 + ":" + (total % 60 < 10 ? "0" : "") + total % 60;
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return "";
+        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
     }
 
     /** Skala „pop” licznika: krótki impuls po zmianie wartości, potem 1.0. */
@@ -874,13 +1094,24 @@ public final class GameScreen {
     private void finishIfNotYet() {
         if (finished) return;
         finished = true;
-        if (loop != null) loop.stop();
+        paused = false;
+        // Zatrzymujemy audio, ale ZOSTAWIAMY pętlę renderującą — animuje ekran wyników.
         if (player != null) {
             player.stop();
-            player.dispose();
         }
-        GameResult result = score.toResult(context.songId());
+        result = score.toResult(context.songId());
         LOG.info(() -> "GameResult: " + result);
+        showingResults = true;
+        resultsStartNanos = System.nanoTime();
+    }
+
+    /** Domknięcie ekranu wyników: zwolnienie zasobów i powrót do menu (przez callback). */
+    private void finishResults() {
+        if (!showingResults) {
+            return;
+        }
+        showingResults = false;
+        stop();
         if (onFinished != null) {
             onFinished.accept(result);
         }
