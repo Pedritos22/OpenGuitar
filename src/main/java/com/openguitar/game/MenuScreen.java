@@ -228,19 +228,25 @@ public final class MenuScreen {
         Button exit = toolbarButton("Wyjście");
         exit.setOnAction(e -> onExit.run());
 
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
         HBox actions = new HBox(8, history, refresh, exit);
         actions.setAlignment(Pos.CENTER_RIGHT);
+        actions.setMinWidth(Region.USE_PREF_SIZE);
+        HBox.setHgrow(actions, Priority.NEVER);
 
-        HBox bar = new HBox(10, statusLabel, spacer, actions);
+        HBox bar = new HBox(10, statusLabel, actions);
         bar.setAlignment(Pos.CENTER_LEFT);
+        statusLabel.setMinWidth(0);
         statusLabel.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(statusLabel, Priority.ALWAYS);
 
-        VBox footer = new VBox(bar);
+        Region divider = new Region();
+        divider.setStyle(PersonaMenuTheme.divider());
+        divider.setMaxWidth(Double.MAX_VALUE);
+
+        VBox footer = new VBox(12, divider, bar);
         footer.setStyle(PersonaMenuTheme.statusBar());
         footer.setMaxWidth(Double.MAX_VALUE);
+        BorderPane.setMargin(footer, new Insets(14, 0, 0, 0));
         return footer;
     }
 
@@ -256,7 +262,7 @@ public final class MenuScreen {
         num.setMaxWidth(INDEX_W);
         num.setAlignment(Pos.CENTER);
 
-        Label rank = rankTile(ready ? entry.context().songId() : null);
+        StackPane rank = rankTile(ready ? entry.context().songId() : null);
 
         Label name = ellipsisLabel(entry.title());
         name.setTextFill(Color.web(PersonaMenuTheme.TEXT));
@@ -331,13 +337,12 @@ public final class MenuScreen {
      * Kafelek rangi (litera w foncie Bebas Neue, kolor wg {@link Rank}). Gdy utwór
      * nie był jeszcze grany — neutralny myślnik. Czyta wyłącznie {@link StatsStore}.
      */
-    private Label rankTile(String songId) {
+    private StackPane rankTile(String songId) {
         Label rk = new Label("–");
         rk.setFont(PersonaFonts.display(30));
-        rk.setMinWidth(34);
-        rk.setPrefWidth(34);
-        rk.setMaxWidth(34);
         rk.setAlignment(Pos.CENTER);
+        rk.setMaxWidth(Double.MAX_VALUE);
+        rk.setMaxHeight(Double.MAX_VALUE);
         rk.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
         if (songId != null) {
             stats.forSong(songId).filter(s -> s.plays > 0).ifPresent(s -> {
@@ -346,7 +351,13 @@ public final class MenuScreen {
                 rk.setTextFill(r.color());
             });
         }
-        return rk;
+
+        StackPane box = new StackPane(rk);
+        box.setMinSize(34, 54);
+        box.setPrefSize(34, 54);
+        box.setMaxSize(34, 54);
+        StackPane.setAlignment(rk, Pos.CENTER);
+        return box;
     }
 
     // ── przyciski (jeden rozmiar wszędzie) ─────────────────────────────────
@@ -363,6 +374,7 @@ public final class MenuScreen {
     private static Button toolbarButton(String text) {
         Button b = new Button(text);
         b.setStyle(PersonaMenuTheme.toolbarButton());
+        b.setMinWidth(Region.USE_PREF_SIZE);
         b.setMinHeight(PersonaMenuTheme.BTN_HEIGHT);
         b.setPrefHeight(PersonaMenuTheme.BTN_HEIGHT);
         b.setMaxHeight(PersonaMenuTheme.BTN_HEIGHT);
@@ -687,8 +699,15 @@ public final class MenuScreen {
         Label rank = new Label(r.label());
         rank.setFont(PersonaFonts.display(26));
         rank.setTextFill(r.color());
-        rank.setMinWidth(30);
         rank.setAlignment(Pos.CENTER);
+        rank.setMaxWidth(Double.MAX_VALUE);
+        rank.setMaxHeight(Double.MAX_VALUE);
+
+        StackPane rankBox = new StackPane(rank);
+        rankBox.setMinSize(34, Region.USE_PREF_SIZE);
+        rankBox.setPrefSize(34, Region.USE_PREF_SIZE);
+        rankBox.setMaxSize(34, Region.USE_PREF_SIZE);
+        StackPane.setAlignment(rank, Pos.CENTER);
 
         Label score = new Label("#" + attempt + "   " + formatNumber(rec.score) + " pkt");
         score.setFont(PersonaMenuTheme.labelFont(13));
@@ -709,7 +728,7 @@ public final class MenuScreen {
         date.setFont(PersonaMenuTheme.bodyFont(10));
         date.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
 
-        HBox row = new HBox(12, rank, info, date);
+        HBox row = new HBox(12, rankBox, info, date);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(8, 12, 8, 12));
         row.setStyle(PersonaMenuTheme.historyRow(toHex(r.color())));

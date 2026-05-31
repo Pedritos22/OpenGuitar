@@ -111,10 +111,6 @@ final class MenuBackground extends Region {
         g.strokeLine(m, h - m, m + len, h - m);
         g.strokeLine(m, h - m - len, m, h - m);
 
-        // Cienka linia bazowa nad stopką
-        g.setStroke(Color.web(PersonaMenuTheme.BORDER_BRIGHT, 0.30));
-        g.setLineWidth(1);
-        g.strokeLine(0, h - 52, w, h - 52);
     }
 
     private static void drawSlashBand(GraphicsContext g, double w, double h,

@@ -21,6 +21,8 @@ import javafx.scene.paint.CycleMethod;
 import javafx.scene.paint.LinearGradient;
 import javafx.scene.paint.RadialGradient;
 import javafx.scene.paint.Stop;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 
 import java.net.URI;
@@ -701,12 +703,23 @@ public final class GameScreen {
         g.save();
         g.translate(cx, cy);
         g.scale(scale, scale);
-        PersonaText.draw(g, rank.label(), 0, 48, PersonaFonts.display(140),
+
+        Font rankFont = PersonaFonts.display(140);
+        Text measure = new Text(rank.label());
+        measure.setFont(rankFont);
+        var bounds = measure.getLayoutBounds();
+
+        double maxDim = Math.max(bounds.getWidth(), bounds.getHeight());
+        double fitScale = (ringR * 1.5) / maxDim;
+        g.scale(fitScale, fitScale);
+
+        double baselineY = -(bounds.getMinY() + bounds.getHeight() / 2.0);
+        PersonaText.draw(g, rank.label(), 0, baselineY, rankFont,
                 rank.color(), PersonaPalette.BLACK, 6, rank.color(0.5),
-                PersonaText.SLANT, TextAlignment.CENTER);
+                0, TextAlignment.CENTER);
         g.restore();
 
-        PersonaText.plain(g, "RANGA", cx, cy + 100, PersonaFonts.label(12),
+        PersonaText.plain(g, "RANGA", cx, cy + 50, PersonaFonts.label(12),
                 PersonaPalette.alpha(PersonaPalette.WHITE_DIM, a), TextAlignment.CENTER);
     }
 
