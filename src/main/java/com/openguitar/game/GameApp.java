@@ -63,6 +63,7 @@ public class GameApp extends Application {
         stage.setOnCloseRequest(e -> {
             if (activeGame != null) activeGame.stop();
             stats.close();
+            SoundManager.get().dispose();
             Platform.exit();
         });
 
@@ -90,9 +91,11 @@ public class GameApp extends Application {
                 stats
         );
         showScene(menu.getScene(), "OpenGuitar");
+        SoundManager.get().startLobbyMusic();
     }
 
     private void launchGame(SongContext context) {
+        SoundManager.get().enterGameplay();
         GameScreen screen = new GameScreen(context, this::onSongFinished, this::launchMenu);
         activeGame = screen;
         showScene(screen.getScene(), "OpenGuitar - " + context.title());
