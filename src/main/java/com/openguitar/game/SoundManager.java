@@ -125,10 +125,16 @@ public final class SoundManager {
         Runnable task = () -> {
             AudioClip clip = clips.get(sfx);
             if (clip != null) {
-                clip.setVolume(volume);
-                clip.setRate(rate);
-                clip.play();
+                // Use per-play parameters to avoid mutating shared AudioClip state.
+                clip.play(volume, 0.0, rate, 0.0, 0);
             }
+        };
+        if (Platform.isFxApplicationThread()) {
+            task.run();
+        } else {
+            Platform.runLater(task);
+        }
+    }
         };
         if (Platform.isFxApplicationThread()) {
             task.run();
