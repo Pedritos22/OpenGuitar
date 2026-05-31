@@ -85,10 +85,11 @@ public final class GameScreen {
     /** Prędkość zjazdu nut już po minięciu hit-line (px/ms). */
     private static final double PAST_HIT_SPEED_PX_PER_MS = 0.45;
 
-    /** Klawisze poszczególnych ścieżek (klasyczny układ "DFJK"). */
-    private static final KeyCode[] LANE_KEYS = {
-            KeyCode.D, KeyCode.F, KeyCode.J, KeyCode.K
-    };
+    /**
+     * Klawisze poszczególnych ścieżek — konfigurowalne (domyślnie "DFJK").
+     * Wczytywane z {@link GameSettings} przy konstrukcji ekranu.
+     */
+    private final KeyCode[] laneKeys;
 
     /** Czas po ostatniej nucie, po którym uznajemy utwór za skończony (ms). */
     private static final int END_GRACE_PERIOD_MS = 2_000;
@@ -213,12 +214,27 @@ public final class GameScreen {
     private GameResult result;
     private RankStampLayout rankStampLayout;
 
+    // Odliczanie startowe (P3R) przed wpuszczeniem do gry oraz po wznowieniu z pauzy.
+    // Podczas odliczania zegar i audio stoją — scena jest zamrożona, rysujemy overlay.
+    private final boolean showHitPopups = GameSettings.get().showHitPopups();
+    private final long countdownTotalNanos;
+    private boolean countingDown = false;
+    private long countdownStartNanos = -1;
+
     // ---------- konstrukcja ----------
 
     public GameScreen(SongContext context, Consumer<GameResult> onFinished, Runnable onQuit) {
         this.context = context;
         this.onFinished = onFinished;
         this.onQuit = onQuit;
+
+        GameSettings settings = GameSettings.get();
+        this.laneKeys = settings.laneKeys();
+        int cdSeconds = settings.countdownSeconds();
+        // Numery liczymy przez cdSeconds sekund, potem krótki błysk „GO!”.
+        this.countdownTotalNanos = cdSeconds <= 0
+                ? 0
+                : (long) cdSeconds * 1_000_000_000L + GO_FLASH_NANOS;
 
         this.runtimeNotes = new ArrayList<>(context.notes().size());
         for (Note n : context.notes()) {
@@ -471,9 +487,9 @@ public final class GameScreen {
         }
     }
 
-    private static int laneFor(KeyCode key) {
+    private int laneFor(KeyCode key) {
         for (int i = 0; i < LANES; i++) {
-            if (LANE_KEYS[i] == key) return i;
+            if (laneKeys[i] == key) return i;
         }
         return -1;
     }
@@ -948,7 +964,7 @@ public final class GameScreen {
     }
 
     private void drawKeyPill(GraphicsContext g, int lane, double centerX) {
-        String key = LANE_KEYS[lane].getName();
+        String key = laneKeys[lane].getName();
         double pillW = 30;
         double pillH = 24;
         double px = centerX - pillW / 2.0;
