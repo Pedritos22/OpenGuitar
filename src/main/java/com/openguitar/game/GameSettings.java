@@ -171,7 +171,19 @@ public final class GameSettings {
         for (int i = 0; i < laneKeys.length; i++) {
             for (int j = i + 1; j < laneKeys.length; j++) {
                 if (laneKeys[i] == laneKeys[j]) {
-                    laneKeys[j] = DEFAULT_KEYS[j];
+                    for (KeyCode fallback : DEFAULT_KEYS) {
+                        boolean used = false;
+                        for (int k = 0; k <= i; k++) {
+                            if (laneKeys[k] == fallback) {
+                                used = true;
+                                break;
+                            }
+                        }
+                        if (!used) {
+                            laneKeys[j] = fallback;
+                            break;
+                        }
+                    }
                 }
             }
         }
