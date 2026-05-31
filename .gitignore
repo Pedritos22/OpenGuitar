@@ -23,3 +23,6 @@ songs/*.FLAC
 # Lokalne statystyki gracza (generowane w runtime) - nie wersjonujemy.
 stats.db
 stats.json
+
+# Ustawienia
+config.properties
