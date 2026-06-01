@@ -3,7 +3,7 @@
 [![Java](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Maven](https://img.shields.io/badge/Maven-3.9+-C71A36?logo=apachemaven&logoColor=white)](https://maven.apache.org/)
 [![JavaFX](https://img.shields.io/badge/JavaFX-21-FF6A00?logo=java&logoColor=white)](https://openjfx.io/)
-[![Tests](https://img.shields.io/badge/Tests-36-25A162?logo=junit5&logoColor=white)](DOCUMENTATION.md#12-testy)
+[![Tests](https://img.shields.io/badge/Tests-65-25A162?logo=junit5&logoColor=white)](DOCUMENTATION.md#12-testy)
 [![GitHub](https://img.shields.io/badge/GitHub-OpenGuitar-181717?logo=github)](https://github.com/Pedritos22/OpenGuitar)
 
 Klon **Guitar Hero** na desktop — Java 21, Maven, JavaFX. Projekt akademicki składający się z dwóch modułów:
@@ -88,13 +88,19 @@ Głośność lobby i piosenek regulujesz suwakami w **⚙ Ustawienia → DŹWIĘ
 ./play.sh --list                       # lista plików audio w songs/
 ```
 
+**Logi diagnostyczne** — `./play.sh` ładuje `src/main/resources/logging.properties`. W konsoli widać zdarzenia aplikacji, audio lobby i rozgrywki (prefiks `[komponent][FX|BG]`, np. `[game][FX] start()`). Szczegóły w [DOCUMENTATION.md §14](DOCUMENTATION.md#14-logi-diagnostyczne).
+
 Równoważne komendy Maven:
 
 ```bash
 mvn javafx:run
 mvn javafx:run -Djavafx.args="songs/utwor.json"
-mvn test                               # testy jednostkowe
+mvn test                               # 65 testów jednostkowych (beatmap + gra)
 ```
+
+### Ostrzeżenia JVM przy starcie (macOS / Java 21+)
+
+Przy `./play.sh` lub `mvn javafx:run` mogą pojawić się żółte linie `WARNING: A restricted method in java.lang.System has been called` — to **nie błąd gry**, tylko informacja Javy o ładowaniu bibliotek natywnych (JavaFX, opcjonalnie SQLite przy statystykach). Gra powinna działać normalnie. Wyjaśnienie → [DOCUMENTATION.md §14](DOCUMENTATION.md#14-logi-diagnostyczne).
 
 ---
 
@@ -125,7 +131,9 @@ OpenGuitar/
 ├── src/main/resources/
 │   ├── fonts/                    # Bebas Neue, Rajdhani (OFL)
 │   ├── images/                   # logo menu
+│   ├── logging.properties        # konfiguracja logów konsoli (INFO / FINE)
 │   └── sound/                    # muzyka lobby + SFX (Kenney CC0)
+├── src/test/java/                # testy JUnit 5 (beatmap + game)
 ├── README.md                     # ten plik
 └── DOCUMENTATION.md              # dokumentacja techniczna
 ```
