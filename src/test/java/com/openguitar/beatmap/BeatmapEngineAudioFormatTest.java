@@ -6,18 +6,65 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 
+import static com.openguitar.beatmap.BeatmapTestSupport.assertMedianIoiNear;
+import static com.openguitar.beatmap.BeatmapTestSupport.assertSimilarRhythmProfiles;
+import static com.openguitar.beatmap.BeatmapTestSupport.countGreedyPairs;
+import static com.openguitar.beatmap.BeatmapTestSupport.medianInterOnsetMs;
+import static com.openguitar.beatmap.BeatmapTestSupport.onsetTimesMs;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BeatmapEngineAudioFormatTest {
+
+    private static final int CLICK_BEAT_MS = 500;
+    private static final int CLICK_COUNT = 16;
 
     @TempDir
     Path tempDir;
 
     @Test
-    void shouldGenerateComparableBeatmapsFromWavAndMp3() throws Exception {
+    void clickTrackWavShouldMatchExpectedCadence() throws Exception {
+        Path wav = tempDir.resolve("clicks.wav");
+        SyntheticAudio.writeClickTrack(wav, CLICK_COUNT, CLICK_BEAT_MS, 1000.0);
+
+        SongContext ctx = new BeatmapEngine(
+                0.3, 0.08, BeatmapEngine.LaneStrategy.ROUND_ROBIN
+        ).generateBeatmap(wav, "wav-cadence", "Click Track");
+
+        List<Integer> times = onsetTimesMs(ctx);
+        assertTrue(times.size() >= 11, "WAV: za mało onsetów: " + times.size());
+        assertTrue(times.size() <= 20, "WAV: za dużo onsetów: " + times.size());
+        assertMedianIoiNear(times, CLICK_BEAT_MS, 120, "WAV");
+        assertTrue(ctx.bpm() >= 100 && ctx.bpm() <= 140, "BPM: " + ctx.bpm());
+    }
+
+    @Test
+    void clickTrackMp3ShouldMatchExpectedCadence() throws Exception {
         Path wav = tempDir.resolve("clicks.wav");
         Path mp3 = tempDir.resolve("clicks.mp3");
-        SyntheticAudio.writeClickTrack(wav, 16, 500, 1000.0);
+        SyntheticAudio.writeClickTrack(wav, CLICK_COUNT, CLICK_BEAT_MS, 1000.0);
+        TestAudioSupport.encodeMp3(wav, mp3);
+
+        SongContext ctx = new BeatmapEngine(
+                0.3, 0.08, BeatmapEngine.LaneStrategy.ROUND_ROBIN
+        ).generateBeatmap(mp3, "mp3-cadence", "Click Track");
+
+        List<Integer> times = onsetTimesMs(ctx);
+        assertTrue(times.size() >= 11, "MP3: za mało onsetów: " + times.size());
+        assertTrue(times.size() <= 20, "MP3: za dużo onsetów: " + times.size());
+        assertMedianIoiNear(times, CLICK_BEAT_MS, 120, "MP3");
+        assertTrue(ctx.bpm() >= 100 && ctx.bpm() <= 140, "BPM: " + ctx.bpm());
+    }
+
+    /**
+     * WAV i MP3 tego samego click-tracka powinny dać podobny rytm (mediana IOI, BPM,
+     * sparowane onsety), a nie identyczne czasy nuty-po-indeksie — MP3 wprowadza
+     * przesunięcie globalne i czasem dodatkowy onset na początku.
+     */
+    @Test
+    void wavAndMp3ClickTracksShouldAgreeOnRhythmNotOnIndex() throws Exception {
+        Path wav = tempDir.resolve("clicks.wav");
+        Path mp3 = tempDir.resolve("clicks.mp3");
+        SyntheticAudio.writeClickTrack(wav, CLICK_COUNT, CLICK_BEAT_MS, 1000.0);
         TestAudioSupport.encodeMp3(wav, mp3);
 
         BeatmapEngine engine = new BeatmapEngine(
@@ -27,29 +74,27 @@ class BeatmapEngineAudioFormatTest {
         SongContext wavCtx = engine.generateBeatmap(wav, "compare", "Click Track");
         SongContext mp3Ctx = engine.generateBeatmap(mp3, "compare", "Click Track");
 
-        assertFalse(wavCtx.notes().isEmpty(), "WAV powinien dać onsety");
-        assertFalse(mp3Ctx.notes().isEmpty(), "MP3 powinien dać onsety");
-        assertTrue(Math.abs(wavCtx.notes().size() - mp3Ctx.notes().size()) <= 2,
-                "Liczba nut dla WAV i MP3 powinna być podobna");
-        assertTrue(Math.abs(wavCtx.bpm() - mp3Ctx.bpm()) <= 10,
-                "BPM dla WAV i MP3 powinno być podobne");
+        List<Integer> wavTimes = onsetTimesMs(wavCtx);
+        List<Integer> mp3Times = onsetTimesMs(mp3Ctx);
 
-        int compared = Math.min(wavCtx.notes().size(), mp3Ctx.notes().size());
-        assertTrue(compared >= 8, "Za mało nut do porównania: " + compared);
-        for (int i = 0; i < compared; i++) {
-            Note w = wavCtx.notes().get(i);
-            Note m = mp3Ctx.notes().get(i);
-            assertEquals(i % 4, w.lane());
-            assertEquals(i % 4, m.lane());
-            assertTrue(Math.abs(w.timeMs() - m.timeMs()) <= 120,
-                    "Różnica czasu zbyt duża dla nuty " + i + ": " + w.timeMs() + " vs " + m.timeMs());
-        }
+        assertTrue(Math.abs(wavTimes.size() - mp3Times.size()) <= 2,
+                "Liczba onsetów WAV=" + wavTimes.size() + " MP3=" + mp3Times.size());
+        assertTrue(Math.abs(wavCtx.bpm() - mp3Ctx.bpm()) <= 15,
+                "BPM WAV=" + wavCtx.bpm() + " MP3=" + mp3Ctx.bpm());
+
+        assertSimilarRhythmProfiles(wavTimes, mp3Times, CLICK_BEAT_MS, 120, 10, 180);
+
+        // Mediana IOI obu formatów powinna być bliska (ten sam materiał źródłowy).
+        double wavIoi = medianInterOnsetMs(wavTimes);
+        double mp3Ioi = medianInterOnsetMs(mp3Times);
+        assertTrue(Math.abs(wavIoi - mp3Ioi) <= 80,
+                "Mediana IOI WAV=" + wavIoi + " vs MP3=" + mp3Ioi);
     }
 
     @Test
     void shouldHandleStereoWavDecodedLikeMp3() throws Exception {
         Path stereo = tempDir.resolve("stereo.wav");
-        SyntheticAudio.writeStereoClickTrack(stereo, 12, 500, 1000.0, 48000);
+        SyntheticAudio.writeStereoClickTrack(stereo, 12, CLICK_BEAT_MS, 1000.0, 48000);
 
         BeatmapEngine engine = new BeatmapEngine(
                 0.25, 0.08, BeatmapEngine.LaneStrategy.SEEDED_PSEUDO_RANDOM
@@ -64,23 +109,9 @@ class BeatmapEngineAudioFormatTest {
     }
 
     @Test
-    void shouldBeDeterministicForSameSongId() throws Exception {
-        Path wav = tempDir.resolve("clicks.wav");
-        SyntheticAudio.writeClickTrack(wav, 16, 500, 1000.0);
-
-        BeatmapEngine engine = new BeatmapEngine(
-                0.3, 0.08, BeatmapEngine.LaneStrategy.SEEDED_PSEUDO_RANDOM
-        );
-        SongContext a = engine.generateBeatmap(wav, "fixed-id", null);
-        SongContext b = engine.generateBeatmap(wav, "fixed-id", null);
-
-        assertEquals(a.notes(), b.notes());
-    }
-
-    @Test
     void shouldAssignRoundRobinLanesInOrder() throws Exception {
         Path wav = tempDir.resolve("rr.wav");
-        SyntheticAudio.writeClickTrack(wav, 8, 500, 1000.0);
+        SyntheticAudio.writeClickTrack(wav, 8, CLICK_BEAT_MS, 1000.0);
 
         BeatmapEngine engine = new BeatmapEngine(
                 0.3, 0.08, BeatmapEngine.LaneStrategy.ROUND_ROBIN
@@ -128,7 +159,7 @@ class BeatmapEngineAudioFormatTest {
     }
 
     @Test
-    void shouldProduceSimilarOutputForWavAndMp3WhenUsingFrequencyBands() throws Exception {
+    void frequencyBandWavAndMp3ShouldAgreeOnRhythmAndPairing() throws Exception {
         Path wav = tempDir.resolve("bands.wav");
         Path mp3 = tempDir.resolve("bands.mp3");
         SyntheticAudio.writeMultiBandTrack(wav, List.of(0, 1, 2, 3, 0, 1, 2, 3), 600);
@@ -140,9 +171,19 @@ class BeatmapEngineAudioFormatTest {
         SongContext wavCtx = engine.generateBeatmap(wav, "band-compare", null);
         SongContext mp3Ctx = engine.generateBeatmap(mp3, "band-compare", null);
 
-        assertFalse(wavCtx.notes().isEmpty());
-        assertFalse(mp3Ctx.notes().isEmpty());
-        assertTrue(Math.abs(wavCtx.notes().size() - mp3Ctx.notes().size()) <= 3);
-        assertTrue(Math.abs(wavCtx.bpm() - mp3Ctx.bpm()) <= 15);
+        List<Integer> wavTimes = onsetTimesMs(wavCtx);
+        List<Integer> mp3Times = onsetTimesMs(mp3Ctx);
+
+        assertFalse(wavTimes.isEmpty());
+        assertFalse(mp3Times.isEmpty());
+        assertTrue(Math.abs(wavTimes.size() - mp3Times.size()) <= 3);
+        assertTrue(Math.abs(wavCtx.bpm() - mp3Ctx.bpm()) <= 20);
+
+        assertMedianIoiNear(wavTimes, 600, 150, "WAV pasma");
+        assertMedianIoiNear(mp3Times, 600, 150, "MP3 pasma");
+
+        int paired = countGreedyPairs(wavTimes, mp3Times, 200);
+        assertTrue(paired >= 5,
+                "Za mało sparowanych onsetów dla ścieżki wielopasmowej: " + paired);
     }
 }

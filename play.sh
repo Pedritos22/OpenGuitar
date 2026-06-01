@@ -48,7 +48,8 @@ list_songs() {
 
 if [ $# -eq 0 ]; then
     # Domyślnie - otwieramy menu (skanuje songs/, użytkownik klika w UI).
-    exec mvn -q -B javafx:run
+    exec mvn -q -B javafx:run \
+        -Djava.util.logging.config.file="$SCRIPT_DIR/src/main/resources/logging.properties"
 fi
 
 case "$1" in
@@ -93,4 +94,6 @@ case "$INPUT" in
         ;;
 esac
 
-exec mvn -q -B javafx:run -Djavafx.args="$INPUT"
+exec mvn -q -B javafx:run \
+    -Djava.util.logging.config.file="$SCRIPT_DIR/src/main/resources/logging.properties" \
+    -Djavafx.args="$INPUT"

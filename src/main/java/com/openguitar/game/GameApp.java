@@ -44,6 +44,7 @@ public class GameApp extends Application {
     private boolean returnToMenuAfterSong = true;
     /** Aktualnie aktywny GameScreen - trzymamy żeby móc go zatrzymać przy zamykaniu okna. */
     private GameScreen activeGame;
+    private volatile boolean shuttingDown;
 
     @Override
     public void start(Stage stage) {
@@ -61,10 +62,8 @@ public class GameApp extends Application {
             }
         });
         stage.setOnCloseRequest(e -> {
-            if (activeGame != null) activeGame.stop();
-            stats.close();
-            SoundManager.get().dispose();
-            Platform.exit();
+            e.consume();
+            shutdownApplication();
         });
 
         SongContext fromArgs = loadFromArgs(getParameters().getRaw());
@@ -74,32 +73,51 @@ public class GameApp extends Application {
         } else {
             launchMenu();
         }
+        GameLog.event(LOG, "app", "start() — okno gotowe");
         stage.show();
     }
 
     // --------------------------- menu / game switching ---------------------
 
     private void launchMenu() {
+        GameLog.event(LOG, "app", "launchMenu() — powrót do menu");
         if (activeGame != null) {
+            GameLog.event(LOG, "app", "launchMenu() — zatrzymuję poprzedni GameScreen");
             activeGame.stop();
             activeGame = null;
         }
         MenuScreen menu = new MenuScreen(
                 SONGS_DIR,
                 this::launchGame,
-                Platform::exit,
+                this::shutdownApplication,
                 stats
         );
-        showScene(menu.getScene(), "OpenGuitar");
+        Scene menuScene = menu.getScene();
+        showScene(menuScene, "OpenGuitar");
         SoundManager.get().startLobbyMusic();
+        GameLog.event(LOG, "app", "launchMenu() — scena menu ustawiona, lobby start");
+        Platform.runLater(() -> {
+            if (stage.getScene() == menuScene) {
+                menuScene.getRoot().requestFocus();
+                GameLog.fine(LOG, "app", "launchMenu() — focus na menu");
+            }
+        });
     }
 
     private void launchGame(SongContext context) {
+        GameLog.event(LOG, "app", "launchGame() — \"" + context.title() + "\" nut="
+                + context.notes().size() + " audio=" + context.audioPath());
+        if (activeGame != null) {
+            GameLog.event(LOG, "app", "launchGame() — zatrzymuję poprzedni GameScreen");
+            activeGame.stop();
+            activeGame = null;
+        }
         SoundManager.get().enterGameplay();
         GameScreen screen = new GameScreen(context, this::onSongFinished, this::launchMenu);
         activeGame = screen;
         showScene(screen.getScene(), "OpenGuitar - " + context.title());
         screen.start();
+        GameLog.event(LOG, "app", "launchGame() — GameScreen.start() wywołane");
     }
 
     /**
@@ -110,23 +128,63 @@ public class GameApp extends Application {
      */
     private void showScene(Scene scene, String title) {
         boolean wasFullScreen = stage.isFullScreen();
+        GameLog.event(LOG, "app", "showScene() — tytuł=\"" + title + "\" fullscreen="
+                + wasFullScreen + " → " + scene.getClass().getSimpleName());
         stage.setScene(scene);
         stage.setTitle(title);
         if (wasFullScreen && !stage.isFullScreen()) {
             stage.setFullScreen(true);
+            GameLog.fine(LOG, "app", "showScene() — przywrócono fullscreen po setScene");
         }
     }
 
+    @Override
+    public void stop() {
+        shutdownResources();
+    }
+
+    /** Bezpieczne zamknięcie — Maven/javafx:run inaczej raportuje kod 143 (SIGTERM). */
+    private void shutdownApplication() {
+        if (shuttingDown) {
+            GameLog.fine(LOG, "app", "shutdownApplication() — już w trakcie zamykania");
+            return;
+        }
+        shuttingDown = true;
+        GameLog.event(LOG, "app", "shutdownApplication()");
+        shutdownResources();
+        Platform.exit();
+        System.exit(0);
+    }
+
+    private void shutdownResources() {
+        GameLog.event(LOG, "app", "shutdownResources() — activeGame="
+                + (activeGame != null ? "tak" : "nie"));
+        try {
+            if (activeGame != null) {
+                activeGame.stop();
+                activeGame = null;
+            }
+        } catch (Exception ex) {
+            GameLog.warn(LOG, "app", "shutdownResources() — błąd zatrzymania gry", ex);
+        }
+        try {
+            stats.close();
+        } catch (Exception ex) {
+            LOG.log(Level.WARNING, "Błąd przy zamykaniu stats.db", ex);
+        }
+        SoundManager.get().dispose();
+    }
+
     private void onSongFinished(GameResult result) {
-        LOG.info(() -> "Wynik: " + result);
+        GameLog.event(LOG, "app", "onSongFinished() — wynik=" + result
+                + " returnToMenu=" + returnToMenuAfterSong);
         activeGame = null;
-        // Animowany ekran wyników pokazuje już GameScreen; tu tylko utrwalamy
-        // statystyki (SQLite) i wracamy do menu / zamykamy okno.
         stats.record(result);
         Platform.runLater(() -> {
             if (returnToMenuAfterSong) {
                 launchMenu();
             } else {
+                GameLog.event(LOG, "app", "onSongFinished() — zamykam okno (tryb CLI)");
                 stage.close();
             }
         });
@@ -202,6 +260,9 @@ public class GameApp extends Application {
     }
 
     public static void main(String[] args) {
+        GameLog.event(LOG, "app", "main() — start JVM");
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) ->
+                GameLog.error(LOG, "app", "nieobsłużony wyjątek w wątku " + thread.getName(), error));
         launch(args);
     }
 }

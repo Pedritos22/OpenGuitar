@@ -19,6 +19,7 @@ Ten dokument opisuje architekturę, algorytmy i konwencje projektu. Do szybkiego
 11. [Pliki danych](#11-pliki-danych)
 12. [Testy](#12-testy)
 13. [Struktura pakietów](#13-struktura-pakietów)
+14. [Logi diagnostyczne](#14-logi-diagnostyczne)
 
 ---
 
@@ -156,6 +157,7 @@ mvn -q exec:java -Dexec.args="--demo /tmp/openguitar-demo"
 | `SoundManager` | Muzyka lobby/wyników, SFX UI i rozgrywki (singleton) |
 | `StatsStore` | SQLite: agregaty + historia podejść |
 | `GameSettings` | `settings.properties`: klawisze, audio, countdown, popupy |
+| `GameLog` | Spójne logi `java.util.logging` z prefiksem `[komponent][FX\|BG]` |
 | `SongLibrary` | Skan `songs/`, dopasowanie audio ↔ JSON |
 
 ---
@@ -216,6 +218,20 @@ Przed pierwszym startem i po wznowieniu z pauzy (jeśli włączone w ustawieniac
 - overlay P3R: 3→2→1→GO!;
 - SFX odliczania (`COUNTDOWN_TICK`, `COUNTDOWN_GO`) — niezależne od przełącznika dźwięków trafień;
 - po zakończeniu: `player.play()` + wyrównanie zegara.
+
+### Odporność audio (MP3 / JavaFX)
+
+`MediaPlayer` dla plików z `songs/` bywa niestabilny po dłuższej grze (zawieszony zegar, status `HALTED`). `GameScreen` stosuje:
+
+| Mechanizm | Opis |
+|-----------|------|
+| `playbackToken` | Unieważnia opóźnione callbacki po `dispose()` lub przeładowaniu playera |
+| `maintainAudioPlayback()` | Co klatkę: wykrywa stall (brak postępu `getCurrentTime()` przez ~2 s) lub `HALTED` |
+| `recreateAudioAtCurrentTime()` | Nowy `MediaPlayer` od bieżącego `currentTimeMs` zamiast wielokrotnego `seek`/`play` |
+| Cooldown odzysku | Min. 4 s między przeładowaniami — unika pętli |
+| `disposePlayer()` | Przed wyjściem do menu / stop — czyści handlery, zatrzymuje poprzedni utwór |
+
+Przy wyjściu z pauzy (**Wyjdź do menu**) nie ustawiamy `finished=true` przed podmianą sceny — inaczej pętla renderu przestaje rysować i widać czarny ekran do czasu `launchMenu()`.
 
 ---
 
@@ -322,7 +338,7 @@ Pliki WAV w `src/main/resources/sound/` (Kenney UI Audio, CC0):
 | `play(Sfx)` | nie | Menu, pauza, odliczanie, UI |
 | `playGameplay(Sfx)` | tak | PERFECT, GREAT, MISS, COMBO |
 
-PERFECT i GREAT używają szklanego `CLICK_GLASS` z modulacją pitch (`setRate`: 1.22 / 1.0). MISS i COMBO — dedykowane próbki.
+PERFECT, GREAT, MISS i COMBO — dedykowane pliki `sfx_perfect.wav`, `sfx_great.wav` itd. (bez współdzielonego `AudioClip` z `setRate`, żeby uniknąć kolizji odtworzeń). `CLICK_GLASS` służy wyłącznie UI (menu, ustawienia).
 
 ### Głośność
 
@@ -360,7 +376,9 @@ audio.gameplay.sfx=true
 | `audio.song.volume` | 100 | Głośność utworu w rozgrywce (0–100) |
 | `audio.gameplay.sfx` | true | Dźwięki trafień (PERFECT/GREAT/MISS/combo) |
 
-Edycja w menu (⚙). Panel przewijany (`ScrollPane`). Przy przypisaniu zajętego klawisza następuje **swap** między ścieżkami. Głośność lobby — suwak z natychmiastowym efektem; głośność piosenek — od następnego startu utworu. Zapis przy zamknięciu panelu (ESC).
+Edycja w menu (⚙). Panel przewijany (`ScrollPane`). Przy przypisaniu zajętego klawisza następuje **swap** między ścieżkami. Po ręcznej edycji pliku duplikaty klawiszy są naprawiane przy wczytaniu (`dedupeKeys`). Głośność lobby — suwak z natychmiastowym efektem; głośność piosenek — od następnego startu utworu. Zapis przy zamknięciu panelu (ESC).
+
+`GameSettings.resetForTests(Path)` — wyłącznie dla testów JUnit (nadpisanie ścieżki pliku, reset singletonu).
 
 ---
 
@@ -404,15 +422,45 @@ CLI (`./play.sh utwor.mp3`) pomija menu; okno zamyka się po utworze.
 ## 12. Testy
 
 ```bash
-mvn test
+mvn test                    # cały zestaw (obecnie 65 testów)
+mvn test -Dtest=GameSettingsTest,RankTest   # wybrane klasy
 ```
 
-| Pakiet | Zakres |
-|--------|--------|
-| `com.openguitar.beatmap` | JSON round-trip, pipeline click-track, frequency bands, loader |
-| `com.openguitar.game` | `ScoreState`, `SongLibrary`, `StatsStore` |
+### Pokrycie według pakietów
 
-Testy syntetyczne (click-track WAV w pamięci) — deterministyczne, bez plików audio w repo.
+| Klasa testowa | Zakres |
+|---------------|--------|
+| **beatmap** | |
+| `BeatmapLoaderTest` | JSON, nieznane pola, walidacja nut, pusta lista `notes`, sortowanie |
+| `BeatmapJsonRoundTripTest` | Serializacja ↔ deserializacja |
+| `BeatmapEngineIntegrationTest` | Click-track → JSON → loader, stereo 48 kHz, determinizm `songId` |
+| `BeatmapEngineAudioFormatTest` | Cadence WAV/MP3, stereo, round-robin, pasma częstotliwości |
+| `BeatmapEngineEdgeCaseTest` | Cisza, domyślny tytuł/UUID, krótki utwór, `minimumInterOnsetIntervalSec` |
+| `FrequencyBandsStrategyTest` | Mapowanie lane ↔ pasmo FFT |
+| `BeatmapTestSupport` | Helper: mediana IOI, greedy pairing onsetów (nie test JUnit) |
+| **game** | |
+| `ScoreStateTest` | Punkty, combo, mnożnik, `HitJudgment`, `toResult` |
+| `RankTest` | Progi S–E, full combo, `GameResult.accuracy()` |
+| `SongLibraryTest` | Skan `songs/`, beatmapy, uszkodzony JSON |
+| `StatsStoreTest` | SQLite agregaty, historia, fallback rangi |
+| `GameSettingsTest` | Clamp, swap klawiszy, round-trip `settings.properties` |
+| `GameLogTest` | Format logów, poziomy, wyjątki |
+
+### Syntetyczne audio w testach
+
+`SyntheticAudio` + `TestAudioSupport` generują WAV w `@TempDir` i opcjonalnie kodują MP3 (`ffmpeg` / `lame` w PATH). **Brak plików audio w repozytorium.**
+
+### Porównanie WAV vs MP3 (ważne)
+
+Nie porównujemy nut **po indeksie** (`notes.get(0)` WAV vs `notes.get(0)` MP3) — MP3 wprowadza przesunięcie globalne i czasem dodatkowy onset na początku (padding dekodera).
+
+Zamiast tego `BeatmapTestSupport` weryfikuje:
+
+1. **Mediana IOI** (odstęp między onsetami) ≈ oczekiwany rytm click-tracka (np. 500 ms ± tolerancja).
+2. **Podobna liczba onsetów** i **BPM** między formatami.
+3. **Greedy pairing** — każdy onset z jednego pliku ma parę w drugim w tolerancji czasowej (np. ±180 ms), niezależnie od indeksu.
+
+To lepiej odzwierciedla wymaganie „WAV i MP3 dają podobną beatmapę”, bez flaky porównań pierwszej nuty.
 
 ---
 
@@ -432,6 +480,7 @@ src/main/java/com/openguitar/
     ├── GameScreen.java         # rozgrywka (Canvas)
     ├── MenuScreen.java         # menu (JavaFX nodes)
     ├── SoundManager.java       # muzyka lobby, SFX, wyniki
+    ├── GameLog.java            # format logów diagnostycznych
     ├── GameSettings.java       # settings.properties
     ├── StatsStore.java         # SQLite
     ├── ScoreState.java         # logika punktacji
@@ -450,9 +499,19 @@ src/main/java/com/openguitar/
         ├── PersonaMenuFx.java
         └── FullscreenScaler.java
 
+src/test/java/com/openguitar/
+├── beatmap/
+│   ├── SyntheticAudio.java     # generator WAV w testach
+│   ├── TestAudioSupport.java   # kodowanie MP3 (ffmpeg/lame)
+│   ├── BeatmapTestSupport.java # asercje rytmu / parowania onsetów
+│   └── …*Test.java
+└── game/
+    └── …*Test.java
+
 src/main/resources/
 ├── fonts/                      # Bebas Neue, Rajdhani (OFL)
 ├── images/menu-logo.png
+├── logging.properties          # poziom logów com.openguitar.*
 └── sound/
     ├── song_lobby.mp3          # muzyka menu
     ├── song_ending.mp3         # lobby (rotacja) + ekran wyników
@@ -472,3 +531,47 @@ Optymalizacje w `GameScreen` (warstwa widoku):
 - gładki zegar audio (patrz [§5](#5-synchronizacja-czasu-i-audio)).
 
 Logika gry i DSP pozostają nietknięte.
+
+---
+
+## 14. Logi diagnostyczne
+
+### Konfiguracja
+
+Plik: `src/main/resources/logging.properties` (ładowany przez `./play.sh` i można przekazać do Maven: `-Djava.util.logging.config.file=…`).
+
+| Ustawienie | Domyślnie | Efekt |
+|------------|-----------|--------|
+| `com.openguitar.game.level` | `INFO` | Przejścia scen, audio lobby, start/stop utworu, pauza, odzysk MP3 |
+| `com.openguitar.game.level=FINE` | (zakomentowane) | Watchdog audio co ~15 s, SFX, sync zegara |
+| `com.openguitar.beatmap.level` | `INFO` | Analiza audio przy generowaniu beatmapy |
+
+### Format (`GameLog`)
+
+```
+[HH:mm:ss.SSS] POZIOM [komponent][FX|BG] wiadomość
+```
+
+| Segment | Znaczenie |
+|---------|-----------|
+| `app` | `GameApp` — menu, gra, shutdown |
+| `game` | `GameScreen` — odtwarzacz utworu, countdown, pauza |
+| `sound` | `SoundManager` — lobby, crossfade, SFX |
+| `FX` / `BG` | Wątek JavaFX vs inny (np. testy JUnit) |
+
+Przykłady zdarzeń INFO: `launchGame()`, `startPlayback()`, `enterGameplay()`, `finishIfNotYet()`.  
+Przykłady WARNING: `tryRecoverAudio(stall)`, błąd `MediaPlayer`, nieobsłużony wyjątek w `main`.
+
+### Ostrzeżenia JVM (nie z gry)
+
+| Komunikat | Źródło | Czy groźne? |
+|-----------|--------|-------------|
+| `restricted method … System::load` + `NativeLibLoader` | JavaFX (rendering) | Nie — standard na Java 21+ |
+| `SQLiteJDBCLoader` / `enable-native-access` | Sterownik `stats.db` | Nie — przy zapisie statystyk |
+| `PersonaFonts` — brak fontu | Brak pliku w `resources/fonts/` | Fallback na font systemowy |
+
+Te komunikaty **nie oznaczają** crashu audio ani menu. Są to wymagania Javy co do natywnych bibliotek; w przyszłości może być potrzebna flaga JVM `--enable-native-access=javafx.graphics`.
+
+### Hałas w `mvn test`
+
+Testy celowo wywołują WARNING (np. `GameLogTest`, uszkodzony JSON w `SongLibraryTest`) — to oczekiwane zachowanie, nie regresja produkcyjna.
