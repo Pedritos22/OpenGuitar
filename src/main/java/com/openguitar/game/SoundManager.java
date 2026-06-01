@@ -94,23 +94,16 @@ public final class SoundManager {
 
     /** Odtwarza krótki efekt (bezpieczne z dowolnego wątku). */
     public void play(Sfx sfx) {
-        playClip(sfx, SFX_VOL, 1.0);
+        GameLog.fine(LOG, "sound", "play(SFX) " + sfx.name());
+        playClip(sfx, SFX_VOL);
     }
 
     /**
      * Efekt rozgrywki (trafienia na ścieżkach). Respektuje {@link GameSettings#gameplayHitSfx()};
-     * PERFECT/GREAT używają szklanego „tap” z lekką modulacją wysokości.
+     * każdy judgment ma dedykowany plik WAV (np. {@link Sfx#PERFECT}).
      */
     public void playGameplay(Sfx sfx) {
         if (!GameSettings.get().gameplayHitSfx()) {
-            return;
-        }
-        if (sfx == Sfx.PERFECT) {
-            playClip(Sfx.CLICK_GLASS, SFX_VOL, 1.22);
-            return;
-        }
-        if (sfx == Sfx.GREAT) {
-            playClip(Sfx.CLICK_GLASS, SFX_VOL, 1.0);
             return;
         }
         play(sfx);
@@ -121,12 +114,12 @@ public final class SoundManager {
         runFx(this::applyLobbyVolume);
     }
 
-    private void playClip(Sfx sfx, double volume, double rate) {
+    private void playClip(Sfx sfx, double volume) {
         Runnable task = () -> {
             AudioClip clip = clips.get(sfx);
             if (clip != null) {
+                // Nie zmieniamy rate na współdzielonym AudioClip — to psuje inne odtworzenia.
                 clip.setVolume(volume);
-                clip.setRate(rate);
                 clip.play();
             }
         };
@@ -139,41 +132,50 @@ public final class SoundManager {
 
     /** Uruchamia losową rotację muzyki lobby. */
     public void startLobbyMusic() {
+        GameLog.event(LOG, "sound", "startLobbyMusic()");
         runFx(this::startLobbyMusicFx);
     }
 
     /** Zatrzymuje muzykę menu — przed wejściem w rozgrywkę. */
     public void enterGameplay() {
+        GameLog.event(LOG, "sound", "enterGameplay() — zatrzymuję lobby/wyniki");
         runFx(() -> {
             lobbyActive = false;
             resultsActive = false;
+            cancelLobbyCrossfade();
             stopOverlay();
-            stopLobbyInternal();
+            stopLobbyInternal(false);
+            GameLog.event(LOG, "sound", "enterGameplay() — gotowe");
         });
     }
 
     /** Muzyka ending na ekranie wyników (delikatna pętla). */
     public void playResultsMusic() {
+        GameLog.event(LOG, "sound", "playResultsMusic()");
         runFx(this::playResultsMusicFx);
     }
 
     /** Zatrzymuje całą muzykę aplikacji (np. przy zamykaniu okna). */
     public void stopAll() {
+        GameLog.event(LOG, "sound", "stopAll()");
         runFx(() -> {
             lobbyActive = false;
             resultsActive = false;
+            cancelLobbyCrossfade();
             stopOverlay();
-            stopLobbyInternal();
+            stopLobbyInternal(false);
         });
     }
 
     public void dispose() {
+        GameLog.event(LOG, "sound", "dispose()");
         stopAll();
     }
 
     // ── lobby ────────────────────────────────────────────────────────────────
 
     private void startLobbyMusicFx() {
+        GameLog.event(LOG, "sound", "startLobbyMusicFx()");
         stopOverlay();
         stopLobbyInternal();
         lobbyActive = true;
@@ -191,8 +193,11 @@ public final class SoundManager {
         stopLobbyInternal(false);
 
         lastLobbyTrack = track;
+        GameLog.event(LOG, "sound", "startLobbyTrack() — " + track + " vol="
+                + String.format("%.2f", lobbyVolume()));
         lobbyPlayer = createPlayer(track, lobbyVolume());
         if (lobbyPlayer == null) {
+            GameLog.warn(LOG, "sound", "startLobbyTrack() — nie udało się utworzyć playera: " + track);
             return;
         }
 
@@ -208,6 +213,7 @@ public final class SoundManager {
             }
         }));
         lobbyPlayer.play();
+        GameLog.fine(LOG, "sound", "startLobbyTrack() — play() status=" + lobbyPlayer.getStatus());
     }
 
     /** ~LOBBY_CROSSFADE_SEC przed końcem uruchamia wygaszanie i kolejny utwór. */
@@ -228,6 +234,8 @@ public final class SoundManager {
                 double remaining = total.subtract(cur).toSeconds();
                 if (remaining <= LOBBY_CROSSFADE_SEC && remaining > 0.05) {
                     lobbyCrossfadeArmed = true;
+                    GameLog.event(LOG, "sound", "crossfade — start za " + String.format("%.1f", remaining)
+                            + "s (track=" + lastLobbyTrack + ")");
                     disarmLobbyCrossfade();
                     crossfadeLobbyToNext(player, false);
                 }
@@ -245,10 +253,13 @@ public final class SoundManager {
 
     private void crossfadeLobbyToNext(MediaPlayer outgoing, boolean outgoingSilent) {
         if (!lobbyActive) {
+            GameLog.fine(LOG, "sound", "crossfadeLobbyToNext() — pominięte (lobby nieaktywne)");
             return;
         }
 
         String nextTrack = pickLobbyTrack(lastLobbyTrack);
+        GameLog.event(LOG, "sound", "crossfadeLobbyToNext() — next=" + nextTrack
+                + " silentOut=" + outgoingSilent);
         lastLobbyTrack = nextTrack;
         double targetVol = lobbyVolume();
 
@@ -305,6 +316,8 @@ public final class SoundManager {
     }
 
     private void finishLobbyCrossfade(MediaPlayer outgoing) {
+        GameLog.fine(LOG, "sound", "finishLobbyCrossfade() — outgoing="
+                + (outgoing != null ? outgoing.getStatus() : "null"));
         lobbyCrossfadeTimeline = null;
         lobbyCrossfadeArmed = false;
         if (outgoing != null && outgoing != lobbyPlayer) {
@@ -317,6 +330,7 @@ public final class SoundManager {
     }
 
     private void cancelLobbyCrossfade() {
+        GameLog.fine(LOG, "sound", "cancelLobbyCrossfade()");
         disarmLobbyCrossfade();
         lobbyCrossfadeArmed = false;
         if (lobbyCrossfadeTimeline != null) {
@@ -344,6 +358,7 @@ public final class SoundManager {
     // ── wyniki ───────────────────────────────────────────────────────────────
 
     private void playResultsMusicFx() {
+        GameLog.event(LOG, "sound", "playResultsMusicFx()");
         lobbyActive = false;
         resultsActive = true;
         stopLobbyInternal();
@@ -351,10 +366,12 @@ public final class SoundManager {
 
         overlayPlayer = createPlayer("/sound/song_ending.mp3", lobbyVolume());
         if (overlayPlayer == null) {
+            GameLog.warn(LOG, "sound", "playResultsMusicFx() — brak overlay playera");
             return;
         }
         overlayPlayer.setCycleCount(MediaPlayer.INDEFINITE);
         overlayPlayer.play();
+        GameLog.fine(LOG, "sound", "playResultsMusicFx() — play status=" + overlayPlayer.getStatus());
     }
 
     // ── wewnętrzne ───────────────────────────────────────────────────────────
@@ -362,28 +379,30 @@ public final class SoundManager {
     private void loadClip(Sfx sfx) {
         URL url = SoundManager.class.getResource("/sound/" + sfx.file);
         if (url == null) {
-            LOG.warning(() -> "Brak SFX: " + sfx.file);
+            GameLog.warn(LOG, "sound", "Brak SFX: " + sfx.file);
             return;
         }
         try {
             clips.put(sfx, new AudioClip(url.toExternalForm()));
         } catch (Exception ex) {
-            LOG.log(Level.WARNING, "Nie udało się załadować SFX " + sfx.file, ex);
+            GameLog.warn(LOG, "sound", "Nie udało się załadować SFX " + sfx.file, ex);
         }
     }
 
     private MediaPlayer createPlayer(String resourcePath, double volume) {
         URL url = SoundManager.class.getResource(resourcePath);
         if (url == null) {
-            LOG.warning(() -> "Brak zasobu audio: " + resourcePath);
+            GameLog.warn(LOG, "sound", "createPlayer() — brak zasobu: " + resourcePath);
             return null;
         }
         try {
             MediaPlayer player = new MediaPlayer(new Media(url.toExternalForm()));
             player.setVolume(volume);
+            GameLog.fine(LOG, "sound", "createPlayer() — OK " + resourcePath + " vol="
+                    + String.format("%.2f", volume));
             return player;
         } catch (Exception ex) {
-            LOG.log(Level.WARNING, "Nie udało się załadować " + resourcePath, ex);
+            GameLog.warn(LOG, "sound", "createPlayer() — błąd " + resourcePath, ex);
             return null;
         }
     }
@@ -397,6 +416,7 @@ public final class SoundManager {
             cancelLobbyCrossfade();
         }
         if (lobbyPlayer != null) {
+            GameLog.fine(LOG, "sound", "stopLobbyInternal() — dispose lobby");
             lobbyPlayer.stop();
             lobbyPlayer.dispose();
             lobbyPlayer = null;
@@ -405,6 +425,7 @@ public final class SoundManager {
 
     private void stopOverlay() {
         if (overlayPlayer != null) {
+            GameLog.fine(LOG, "sound", "stopOverlay() — dispose overlay");
             overlayPlayer.stop();
             overlayPlayer.dispose();
             overlayPlayer = null;
