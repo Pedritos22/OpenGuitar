@@ -8,6 +8,7 @@ import com.openguitar.game.view.PersonaFonts;
 import com.openguitar.game.view.PersonaPalette;
 import com.openguitar.game.view.PersonaText;
 import javafx.animation.AnimationTimer;
+import javafx.application.Platform;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
@@ -15,7 +16,9 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.StackPane;
 import javafx.scene.media.Media;
+import javafx.scene.media.MediaException;
 import javafx.scene.media.MediaPlayer;
+import javafx.util.Duration;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.CycleMethod;
 import javafx.scene.paint.LinearGradient;
@@ -26,6 +29,7 @@ import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -112,6 +116,9 @@ public final class GameScreen {
 
     /** Czas trwania błysku „GO!” na końcu odliczania startowego. */
     private static final long GO_FLASH_NANOS = 600_000_000L;
+    private static final int MAX_POPUPS = 24;
+    /** Po tylu ns bez postępu pozycji audio próbujemy wznowić odtwarzanie. */
+    private static final long AUDIO_STALL_NANOS = 2_500_000_000L;
 
     /** Opcje ekranu pauzy. */
     private static final String[] PAUSE_OPTIONS = {"WZNÓW", "WYJDŹ DO MENU"};
@@ -193,6 +200,16 @@ public final class GameScreen {
     // Dzięki temu na WAV (gdzie zegar mediów aktualizuje się grubo) nie ma juttera.
     private long lastFrameNanos = -1;
     private double lastRawAudioMs = -1;
+    private long lastAudioProgressNanos = -1;
+    private double lastAudioProgressMs = -1;
+    /** Pozycja utworu w momencie pauzy (do seek przy wznowieniu). */
+    private double pauseMediaTimeMs = 0;
+    private long lastAudioRecoverNanos = 0;
+    private static final long AUDIO_RECOVER_COOLDOWN_NANOS = 4_000_000_000L;
+    private static final long AUDIO_DIAG_INTERVAL_NANOS = 15_000_000_000L;
+    private long lastAudioDiagNanos = 0;
+    /** Unieważnia opóźnione callbacki MediaPlayer po wyjściu / przeładowaniu audio. */
+    private int playbackToken = 0;
 
     // Bufor wyniku placementu nuty — unikamy alokacji rekordu na każdą nutę/klatkę.
     private double npX;
@@ -269,30 +286,7 @@ public final class GameScreen {
 
     /** Inicjalizuje audio i uruchamia pętlę renderującą. Wywołać raz po pokazaniu sceny. */
     public void start() {
-        String audioPathRaw = context.audioPath();
-        if (audioPathRaw != null && !audioPathRaw.isBlank()) {
-            Path audioPath = Paths.get(audioPathRaw);
-            if (!audioPath.isAbsolute()) {
-                audioPath = Paths.get(".").resolve(audioPath).normalize().toAbsolutePath();
-            }
-            URI uri = audioPath.toUri();
-            try {
-                Media media = new Media(uri.toString());
-                player = new MediaPlayer(media);
-                player.setOnReady(() -> player.setVolume(SoundManager.songVolume()));
-                player.setOnEndOfMedia(this::finishIfNotYet);
-                player.setOnError(() -> LOG.log(Level.WARNING,
-                        "MediaPlayer error: " + player.getError()));
-                // Odtwarzanie startuje dopiero po odliczeniu (patrz beginCountdown / finishCountdown).
-            } catch (Exception ex) {
-                LOG.log(Level.WARNING,
-                        "Nie udało się załadować audio " + uri + " - kontynuuję bez muzyki.", ex);
-                player = null;
-            }
-        } else {
-            LOG.info("Brak audioPath w SongContext - tryb tylko-wizualny.");
-        }
-
+                + " nut=" + runtimeNotes.size() + " koniec=" + songEndTimeMs + "ms");
         loop = new AnimationTimer() {
             @Override public void handle(long now) {
                 if (loopStartNanos < 0) loopStartNanos = now;
@@ -303,8 +297,61 @@ public final class GameScreen {
         canvas.requestFocus();
         scene.getRoot().requestFocus();
 
-        // Wejście do gry przez odliczanie (jeśli włączone w ustawieniach).
-        beginCountdown();
+        // MediaPlayer tworzymy po pierwszej klatce UI — duży MP3 nie blokuje startu sceny.
+        Platform.runLater(() -> {
+            initAudioPlayer();
+            beginCountdown();
+        });
+    }
+
+    private void initAudioPlayer() {
+        playbackToken++;
+        int token = playbackToken;
+
+        String audioPathRaw = context.audioPath();
+        if (audioPathRaw == null || audioPathRaw.isBlank()) {
+            return;
+        }
+        Path audioPath = resolveAudioPath(audioPathRaw);
+        if (!Files.isRegularFile(audioPath)) {
+            return;
+        }
+        URI uri = audioPath.toUri();
+        String source = uri.toASCIIString();
+        try {
+            Media media = new Media(source);
+            media.setOnError(() -> LOG.warning(() -> "Media error: " + media.getError()));
+            MediaPlayer created = new MediaPlayer(media);
+            player = created;
+            created.setOnReady(() -> {
+                if (token != playbackToken || player != created) {
+                    return;
+                }
+                created.setVolume(SoundManager.songVolume());
+                        + (int) created.getTotalDuration().toMillis() + "ms vol="
+                        + String.format("%.2f", SoundManager.songVolume()));
+            });
+            created.setOnEndOfMedia(() -> {
+                if (token == playbackToken) {
+                    finishIfNotYet();
+                }
+            });
+            created.setOnError(() -> {
+                if (token == playbackToken) {
+                    onMediaPlayerError();
+                }
+            });
+        } catch (Exception ex) {
+            player = null;
+        }
+    }
+
+    private static Path resolveAudioPath(String audioPathRaw) {
+        Path audioPath = Paths.get(audioPathRaw);
+        if (!audioPath.isAbsolute()) {
+            audioPath = Paths.get(".").resolve(audioPath).normalize().toAbsolutePath();
+        }
+        return audioPath;
     }
 
     /** Rozpoczyna odliczanie startowe. Jeśli wyłączone — od razu rusza rozgrywka/audio. */
@@ -314,6 +361,13 @@ public final class GameScreen {
         if (countdownTotalNanos <= 0) {
             startPlayback();
             return;
+        }
+        if (player != null) {
+            try {
+                player.pause();
+            } catch (Exception ex) {
+                LOG.log(Level.FINE, "pause before countdown", ex);
+            }
         }
         countingDown = true;
         countdownStartNanos = -1;
@@ -335,22 +389,119 @@ public final class GameScreen {
 
     /** Startuje/wznawia odtwarzanie audio (jeśli jest). */
     private void startPlayback() {
-        if (player != null) {
-            player.setVolume(SoundManager.songVolume());
-            player.play();
+        if (player == null) {
+            return;
         }
+        try {
+            player.setVolume(SoundManager.songVolume());
+            double at = Math.max(0, pauseMediaTimeMs > 0 ? pauseMediaTimeMs : currentTimeMs);
+            player.seek(Duration.millis(at));
+            player.play();
+            currentTimeMs = at;
+            lastRawAudioMs = at;
+            lastAudioProgressMs = at;
+            lastAudioProgressNanos = System.nanoTime();
+                    + player.getStatus());
+        } catch (Exception ex) {
+        }
+    }
+
+    private void onMediaPlayerError() {
+        if (player == null || finished || paused) {
+            return;
+        }
+        MediaException err = player.getError();
+                + (int) currentTimeMs + "ms");
+        Platform.runLater(this::recreateAudioAtCurrentTime);
+    }
+
+    /** Wykrywa zawieszenie zegara mediów i przeładowuje odtwarzacz. */
+    private void maintainAudioPlayback(long nowNanos) {
+        if (player == null || paused || finished || countingDown) {
+            return;
+        }
+        MediaPlayer.Status status = player.getStatus();
+        if (lastAudioDiagNanos == 0 || nowNanos - lastAudioDiagNanos >= AUDIO_DIAG_INTERVAL_NANOS) {
+            lastAudioDiagNanos = nowNanos;
+            double rawDiag = player.getCurrentTime().toMillis();
+                    + " gameMs=" + (int) currentTimeMs + " rawMs=" + (int) rawDiag
+                    + " token=" + playbackToken);
+        }
+        if (status == MediaPlayer.Status.HALTED) {
+            tryRecoverAudio(nowNanos, "HALTED");
+            return;
+        }
+        if (status != MediaPlayer.Status.PLAYING) {
+            return;
+        }
+        double raw = player.getCurrentTime().toMillis();
+        if (raw > lastAudioProgressMs + 0.25) {
+            lastAudioProgressMs = raw;
+            lastAudioProgressNanos = nowNanos;
+            return;
+        }
+        if (lastAudioProgressNanos > 0
+                && nowNanos - lastAudioProgressNanos > AUDIO_STALL_NANOS) {
+                    + (int) raw + " lastProgress=" + (int) lastAudioProgressMs);
+            tryRecoverAudio(nowNanos, "stall");
+        }
+    }
+
+    private void tryRecoverAudio(long nowNanos, String reason) {
+        if (nowNanos - lastAudioRecoverNanos < AUDIO_RECOVER_COOLDOWN_NANOS) {
+            return;
+        }
+        lastAudioRecoverNanos = nowNanos;
+                + (int) currentTimeMs + "ms, przeładowanie odtwarzacza");
+        recreateAudioAtCurrentTime();
+    }
+
+    /** Nowy MediaPlayer od bieżącego czasu (JavaFX MP3 bywa niestabilny po wielu seek/play). */
+    private void recreateAudioAtCurrentTime() {
+        if (finished || paused || countingDown) {
+                    + finished + " paused=" + paused + " countdown=" + countingDown + ")");
+            return;
+        }
+        double at = Math.max(0, currentTimeMs);
+        disposePlayer();
+        initAudioPlayer();
+        if (player == null) {
+            return;
+        }
+        pauseMediaTimeMs = at;
+        currentTimeMs = at;
+        lastRawAudioMs = at;
+        lastAudioProgressMs = at;
+        lastAudioProgressNanos = System.nanoTime();
+        startPlayback();
     }
 
     /** Zatrzymuje rozgrywkę i zwalnia zasoby (audio, pętla). Idempotentne. */
     public void stop() {
+                + showingResults);
         if (loop != null) {
             loop.stop();
             loop = null;
         }
-        if (player != null) {
-            player.stop();
-            player.dispose();
-            player = null;
+        disposePlayer();
+    }
+
+    private void disposePlayer() {
+        playbackToken++;
+        if (player == null) {
+            return;
+        }
+                + (int) currentTimeMs + "ms status=" + player.getStatus());
+        MediaPlayer p = player;
+        player = null;
+        p.setOnEndOfMedia(null);
+        p.setOnError(null);
+        p.setOnReady(null);
+        try {
+            p.stop();
+            p.dispose();
+        } catch (Exception ex) {
+            LOG.log(Level.FINE, "MediaPlayer dispose", ex);
         }
     }
 
@@ -394,6 +545,10 @@ public final class GameScreen {
 
             markPassedNotesAsMisses();
             popups.removeIf(p -> p.isExpired(nowNanos));
+            trimPopups();
+            if (!countingDown) {
+                maintainAudioPlayback(nowNanos);
+            }
         }
 
         render(nowNanos);
@@ -452,6 +607,7 @@ public final class GameScreen {
             // świeża próbka z mediów — koryguj dryf do dźwięku
             double drift = raw - currentTimeMs;
             if (Math.abs(drift) > 150) {
+                        + String.format("%.0f", drift) + "ms raw=" + (int) raw);
                 currentTimeMs = raw; // seek / duża luka / stall — twardy sync
             } else {
                 currentTimeMs += frameDtMs + drift * 0.15; // płynna korekta
@@ -543,13 +699,30 @@ public final class GameScreen {
     }
 
     private void pauseGame() {
-        if (paused || finished) return;
+        if (paused || finished || countingDown) {
+            return;
+        }
         paused = true;
         pauseSelection = 0;
         pauseStartNanos = System.nanoTime();
+        pauseMediaTimeMs = currentTimeMs;
         SoundManager.get().play(SoundManager.Sfx.PAUSE);
-        if (player != null) {
-            player.pause();
+        pauseMediaPlayback();
+        canvas.requestFocus();
+    }
+
+    private void pauseMediaPlayback() {
+        if (player == null) {
+            return;
+        }
+        try {
+            pauseMediaTimeMs = player.getCurrentTime().toMillis();
+            MediaPlayer.Status status = player.getStatus();
+            if (status == MediaPlayer.Status.PLAYING || status == MediaPlayer.Status.PAUSED) {
+                player.pause();
+            }
+        } catch (Exception ex) {
+            LOG.log(Level.WARNING, "Nie udało się wstrzymać audio", ex);
         }
     }
 
@@ -571,16 +744,20 @@ public final class GameScreen {
         }
     }
 
-    /** Wyjście z pauzy prosto do menu (bez ekranu wyniku). */
+    /**
+     * Wyjście z pauzy do menu. Nie ustawiamy {@code finished=true} przed podmianą sceny —
+     * inaczej pętla renderu przestaje rysować i widać czarny ekran do czasu {@code launchMenu}.
+     */
     private void quitToMenu() {
-        if (finished) return;
-        finished = true;
-        paused = false;
-        SoundManager.get().play(SoundManager.Sfx.BACK);
-        stop();
-        if (onQuit != null) {
-            onQuit.run();
+        if (finished || onQuit == null) {
+                    + " onQuit=" + (onQuit != null) + ")");
+            return;
         }
+        paused = false;
+        countingDown = false;
+        disposePlayer();
+        SoundManager.get().play(SoundManager.Sfx.BACK);
+        onQuit.run();
     }
 
     private int laneFor(KeyCode key) {
@@ -711,7 +888,16 @@ public final class GameScreen {
 
     private void render(long nowNanos) {
         GraphicsContext g = canvas.getGraphicsContext2D();
+        try {
+            renderFrame(g, nowNanos);
+        } catch (Exception ex) {
+            LOG.log(Level.SEVERE, "Błąd renderowania — rysuję tło awaryjne", ex);
+            g.setFill(BG_GRADIENT);
+            g.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        }
+    }
 
+    private void renderFrame(GraphicsContext g, long nowNanos) {
         if (showingResults) {
             drawResults(g, nowNanos);
             return;
@@ -731,6 +917,12 @@ public final class GameScreen {
 
         if (paused) {
             drawPauseMenu(g, nowNanos);
+        }
+    }
+
+    private void trimPopups() {
+        while (popups.size() > MAX_POPUPS) {
+            popups.remove(0);
         }
     }
 
@@ -1403,13 +1595,16 @@ public final class GameScreen {
         if (finished) return;
         finished = true;
         paused = false;
-        // Zatrzymujemy audio, ale ZOSTAWIAMY pętlę renderującą — animuje ekran wyników.
+        // Zatrzymujemy audio utworu, ale ZOSTAWIAMY pętlę — animuje ekran wyników.
         if (player != null) {
-            player.stop();
+            try {
+                player.stop();
+            } catch (Exception ex) {
+                LOG.log(Level.FINE, "stop at results", ex);
+            }
         }
         result = score.toResult(context.songId());
         rankStampLayout = computeRankStampLayout(result.rank(), RANK_STAMP_RING_RADIUS);
-        LOG.info(() -> "GameResult: " + result);
         showingResults = true;
         resultsStartNanos = System.nanoTime();
         SoundManager.get().playResultsMusic();
