@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BeatmapLoaderTest {
 
@@ -114,5 +115,72 @@ class BeatmapLoaderTest {
         assertThrows(IllegalArgumentException.class, () -> new Note(-1, 0));
         assertThrows(IllegalArgumentException.class, () -> new Note(0, -1));
         assertThrows(IllegalArgumentException.class, () -> new Note(0, 4));
+    }
+
+    @Test
+    void shouldLoadEmptyNotesArray() throws Exception {
+        Path json = tempDir.resolve("empty-notes.json");
+        Files.writeString(json, """
+                {
+                  "songId": "empty",
+                  "title": "Empty",
+                  "bpm": 120,
+                  "audioPath": "empty.wav",
+                  "notes": []
+                }
+                """);
+
+        SongContext loaded = new BeatmapLoader().load(json);
+        assertTrue(loaded.notes().isEmpty());
+        assertEquals("empty", loaded.songId());
+    }
+
+    @Test
+    void shouldTreatMissingNotesFieldAsEmptyList() throws Exception {
+        Path json = tempDir.resolve("no-notes.json");
+        Files.writeString(json, """
+                {
+                  "songId": "no-notes",
+                  "title": "No Notes",
+                  "bpm": 100,
+                  "audioPath": "x.wav"
+                }
+                """);
+
+        SongContext loaded = new BeatmapLoader().load(json);
+        assertTrue(loaded.notes().isEmpty());
+    }
+
+    @Test
+    void shouldSortDuplicateTimesOnLoad() throws Exception {
+        Path json = tempDir.resolve("dup-times.json");
+        Files.writeString(json, """
+                {
+                  "songId": "dup",
+                  "title": "Dup",
+                  "bpm": 120,
+                  "audioPath": "a.wav",
+                  "notes": [
+                    {"timeMs": 500, "lane": 2},
+                    {"timeMs": 100, "lane": 0},
+                    {"timeMs": 500, "lane": 1}
+                  ]
+                }
+                """);
+
+        SongContext loaded = new BeatmapLoader().load(json);
+        assertEquals(List.of(
+                new Note(100, 0),
+                new Note(500, 2),
+                new Note(500, 1)
+        ), loaded.notes());
+    }
+
+    @Test
+    void songContextNullNotesShouldBeEmptyImmutable() {
+        SongContext ctx = new SongContext("id", "T", 120, "a.wav", null);
+        assertTrue(ctx.notes().isEmpty());
+        assertThrows(UnsupportedOperationException.class,
+                () -> ctx.notes().add(new Note(0, 0)));
     }
 }
