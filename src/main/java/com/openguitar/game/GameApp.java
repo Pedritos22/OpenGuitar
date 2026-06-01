@@ -73,13 +73,16 @@ public class GameApp extends Application {
         } else {
             launchMenu();
         }
+        GameLog.event(LOG, "app", "start() — okno gotowe");
         stage.show();
     }
 
     // --------------------------- menu / game switching ---------------------
 
     private void launchMenu() {
+        GameLog.event(LOG, "app", "launchMenu() — powrót do menu");
         if (activeGame != null) {
+            GameLog.event(LOG, "app", "launchMenu() — zatrzymuję poprzedni GameScreen");
             activeGame.stop();
             activeGame = null;
         }
@@ -92,15 +95,20 @@ public class GameApp extends Application {
         Scene menuScene = menu.getScene();
         showScene(menuScene, "OpenGuitar");
         SoundManager.get().startLobbyMusic();
+        GameLog.event(LOG, "app", "launchMenu() — scena menu ustawiona, lobby start");
         Platform.runLater(() -> {
             if (stage.getScene() == menuScene) {
                 menuScene.getRoot().requestFocus();
+                GameLog.fine(LOG, "app", "launchMenu() — focus na menu");
             }
         });
     }
 
     private void launchGame(SongContext context) {
+        GameLog.event(LOG, "app", "launchGame() — \"" + context.title() + "\" nut="
+                + context.notes().size() + " audio=" + context.audioPath());
         if (activeGame != null) {
+            GameLog.event(LOG, "app", "launchGame() — zatrzymuję poprzedni GameScreen");
             activeGame.stop();
             activeGame = null;
         }
@@ -109,6 +117,7 @@ public class GameApp extends Application {
         activeGame = screen;
         showScene(screen.getScene(), "OpenGuitar - " + context.title());
         screen.start();
+        GameLog.event(LOG, "app", "launchGame() — GameScreen.start() wywołane");
     }
 
     /**
@@ -119,10 +128,13 @@ public class GameApp extends Application {
      */
     private void showScene(Scene scene, String title) {
         boolean wasFullScreen = stage.isFullScreen();
+        GameLog.event(LOG, "app", "showScene() — tytuł=\"" + title + "\" fullscreen="
+                + wasFullScreen + " → " + scene.getClass().getSimpleName());
         stage.setScene(scene);
         stage.setTitle(title);
         if (wasFullScreen && !stage.isFullScreen()) {
             stage.setFullScreen(true);
+            GameLog.fine(LOG, "app", "showScene() — przywrócono fullscreen po setScene");
         }
     }
 
@@ -134,22 +146,26 @@ public class GameApp extends Application {
     /** Bezpieczne zamknięcie — Maven/javafx:run inaczej raportuje kod 143 (SIGTERM). */
     private void shutdownApplication() {
         if (shuttingDown) {
+            GameLog.fine(LOG, "app", "shutdownApplication() — już w trakcie zamykania");
             return;
         }
         shuttingDown = true;
+        GameLog.event(LOG, "app", "shutdownApplication()");
         shutdownResources();
         Platform.exit();
         System.exit(0);
     }
 
     private void shutdownResources() {
+        GameLog.event(LOG, "app", "shutdownResources() — activeGame="
+                + (activeGame != null ? "tak" : "nie"));
         try {
             if (activeGame != null) {
                 activeGame.stop();
                 activeGame = null;
             }
         } catch (Exception ex) {
-            LOG.log(Level.WARNING, "Błąd przy zatrzymywaniu gry", ex);
+            GameLog.warn(LOG, "app", "shutdownResources() — błąd zatrzymania gry", ex);
         }
         try {
             stats.close();
@@ -160,12 +176,15 @@ public class GameApp extends Application {
     }
 
     private void onSongFinished(GameResult result) {
+        GameLog.event(LOG, "app", "onSongFinished() — wynik=" + result
+                + " returnToMenu=" + returnToMenuAfterSong);
         activeGame = null;
         stats.record(result);
         Platform.runLater(() -> {
             if (returnToMenuAfterSong) {
                 launchMenu();
             } else {
+                GameLog.event(LOG, "app", "onSongFinished() — zamykam okno (tryb CLI)");
                 stage.close();
             }
         });
@@ -241,8 +260,9 @@ public class GameApp extends Application {
     }
 
     public static void main(String[] args) {
+        GameLog.event(LOG, "app", "main() — start JVM");
         Thread.setDefaultUncaughtExceptionHandler((thread, error) ->
-                LOG.log(Level.SEVERE, "Nieobsłużony wyjątek w wątku " + thread.getName(), error));
+                GameLog.error(LOG, "app", "nieobsłużony wyjątek w wątku " + thread.getName(), error));
         launch(args);
     }
 }
