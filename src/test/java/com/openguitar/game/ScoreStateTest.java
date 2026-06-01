@@ -92,4 +92,29 @@ class ScoreStateTest {
         assertEquals(HitJudgment.GREAT,   HitJudgment.classify(100));
         assertEquals(HitJudgment.MISS,    HitJudgment.classify(101));
     }
+
+    @Test
+    void hitJudgmentWindowsAndPoints() {
+        assertEquals(100, HitJudgment.hitWindowMs());
+        assertEquals(300, HitJudgment.PERFECT.basePoints());
+        assertEquals(150, HitJudgment.GREAT.basePoints());
+        assertEquals(0, HitJudgment.MISS.basePoints());
+        assertEquals(50, HitJudgment.PERFECT.windowMs());
+        assertEquals(100, HitJudgment.GREAT.windowMs());
+    }
+
+    @Test
+    void toResultShouldExposeJudgmentCounts() {
+        ScoreState s = new ScoreState();
+        s.register(HitJudgment.PERFECT);
+        s.register(HitJudgment.PERFECT);
+        s.register(HitJudgment.GREAT);
+        s.registerMiss();
+
+        GameResult r = s.toResult("x");
+        assertEquals(2, r.perfect());
+        assertEquals(1, r.great());
+        assertEquals(1, r.misses());
+        assertEquals(3, r.hits());
+    }
 }
