@@ -10,7 +10,8 @@ target/
 hs_err_pid*.log
 
 # Pliki audio użytkownika - nie commitujemy do repo (mogą być duże + prawa autorskie).
-# Beatmapy JSON pozostają jawnie wersjonowane.
+# 01.06.2026 Beatmapy JSON juz nie sa jawnie wersjonowane.
+
 songs/*.mp3
 songs/*.wav
 songs/*.aiff
@@ -19,9 +20,11 @@ songs/*.MP3
 songs/*.WAV
 songs/*.AIFF
 songs/*.FLAC
+songs/*.json
 
 # Lokalne statystyki gracza (SQLite, generowane w runtime) - nie wersjonujemy.
 stats.db
 
 # Lokalne ustawienia użytkownika (klawisze, odliczanie) - generowane w runtime.
 settings.properties
+
