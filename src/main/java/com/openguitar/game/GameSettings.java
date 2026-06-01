@@ -29,7 +29,9 @@ public final class GameSettings {
 
     private static final Logger LOG = Logger.getLogger(GameSettings.class.getName());
 
-    private static final Path FILE = Paths.get("settings.properties").toAbsolutePath();
+    private static final Path DEFAULT_FILE = Paths.get("settings.properties").toAbsolutePath();
+    /** Nadpisywany w testach — domyślnie {@link #DEFAULT_FILE}. */
+    private static Path storageFile = DEFAULT_FILE;
 
     /** Liczba ścieżek = liczba konfigurowalnych klawiszy. */
     public static final int LANES = GameScreen.LANES;
@@ -65,6 +67,15 @@ public final class GameSettings {
             instance.load();
         }
         return instance;
+    }
+
+    /**
+     * Resetuje singleton i opcjonalnie wskazuje inny plik (tylko testy w tym pakiecie).
+     * {@code path == null} przywraca domyślny {@code settings.properties}.
+     */
+    static synchronized void resetForTests(Path path) {
+        instance = null;
+        storageFile = path == null ? DEFAULT_FILE : path.toAbsolutePath();
     }
 
     // ── gettery ──────────────────────────────────────────────────────────────
@@ -164,11 +175,11 @@ public final class GameSettings {
     // ── trwałość ──────────────────────────────────────────────────────────────
 
     private void load() {
-        if (!Files.isRegularFile(FILE)) {
+        if (!Files.isRegularFile(storageFile)) {
             return;
         }
         Properties p = new Properties();
-        try (InputStream in = Files.newInputStream(FILE)) {
+        try (InputStream in = Files.newInputStream(storageFile)) {
             p.load(in);
         } catch (Exception ex) {
             LOG.log(Level.WARNING, "Nie udało się wczytać ustawień — używam domyślnych.", ex);
@@ -204,10 +215,10 @@ public final class GameSettings {
         p.setProperty("audio.lobby.volume", Integer.toString(lobbyMusicVolume));
         p.setProperty("audio.song.volume", Integer.toString(songMusicVolume));
         p.setProperty("audio.gameplay.sfx", Boolean.toString(gameplayHitSfx));
-        try (OutputStream out = Files.newOutputStream(FILE)) {
+        try (OutputStream out = Files.newOutputStream(storageFile)) {
             p.store(out, "OpenGuitar — ustawienia użytkownika");
         } catch (Exception ex) {
-            LOG.log(Level.WARNING, "Nie udało się zapisać ustawień do " + FILE, ex);
+            LOG.log(Level.WARNING, "Nie udało się zapisać ustawień do " + storageFile, ex);
         }
     }
 
