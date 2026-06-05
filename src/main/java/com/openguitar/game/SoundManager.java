@@ -15,18 +15,14 @@ import java.net.URL;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * Centralny menedżer muzyki menu i krótkich efektów dźwiękowych (JavaFX {@link AudioClip}).
  *
- * <p>Muzyka lobby losowo rotuje między {@code song_lobby.mp3} a {@code song_ending.mp3}
- * z krótkim crossfade'm między utworami. Po zakończeniu gry {@code song_ending.mp3}
- * towarzyszy ekranowi wyników (w pętli).</p>
- *
- * <p>Efekty UI pochodzą z pakietu Kenney UI Audio (CC0) — patrz
- * {@code resources/sound/KENNEY_UI_AUDIO_LICENSE.txt}.</p>
+ * <p>Muzyka menu jest przypisana do ekranu: panel startowy {@code song_lobby.mp3},
+ * lista utworów {@code song_ending.mp3} (crossfade ~2,8 s przy przejściu). Po grze
+ * {@code song_ending.mp3} w pętli na ekranie wyników. Efekty UI: Kenney UI Audio (CC0).</p>
  */
 public final class SoundManager {
 
@@ -34,11 +30,15 @@ public final class SoundManager {
 
     private static SoundManager instance;
 
-    private static final double SFX_VOL = 0.72;
+
+    /** Utwór 1 — panel startowy (ekran tytułowy). */
+    private static final String TITLE_TRACK = "/sound/song_lobby.mp3";
+    /** Utwór 2 — lista utworów (i ekran wyników). */
+    private static final String MENU_TRACK = "/sound/song_ending.mp3";
 
     private static final String[] LOBBY_TRACKS = {
-            "/sound/song_lobby.mp3",
-            "/sound/song_ending.mp3"
+            TITLE_TRACK,
+            MENU_TRACK
     };
 
     /** Czas wygaszania / pojawiania się kolejnego utworu lobby. */
@@ -78,6 +78,8 @@ public final class SoundManager {
     private boolean lobbyCrossfadeArmed;
     /** Ostatnio odtworzony utwór lobby — by nie powtarzać tego samego dwa razy z rzędu. */
     private String lastLobbyTrack;
+    /** Utwór menu wymuszony przez ekran; {@code null} = losowa rotacja. */
+    private String forcedTrack;
 
     private SoundManager() {
         for (Sfx sfx : Sfx.values()) {
@@ -174,14 +176,31 @@ public final class SoundManager {
 
     // ── lobby ────────────────────────────────────────────────────────────────
 
-    private void startLobbyMusicFx() {
-        GameLog.event(LOG, "sound", "startLobbyMusicFx()");
-        stopOverlay();
-        stopLobbyInternal();
-        lobbyActive = true;
+    /**
+     * Przełącza muzykę menu na wskazany utwór (zapętlony). Gdy ten sam utwór już gra
+     * — nic nie robi. W przeciwnym razie robi crossfade z aktualnego utworu albo
+     * startuje od zera, jeśli nic nie gra.
+     */
+    private void switchScreenMusic(String track) {
+        GameLog.event(LOG, "sound", "switchScreenMusic() — " + track);
+        forcedTrack = track;
         resultsActive = false;
-        lastLobbyTrack = null;
-        startLobbyTrack(pickLobbyTrack(null));
+        stopOverlay();
+
+        if (lobbyActive && track.equals(lastLobbyTrack) && lobbyPlayer != null) {
+            GameLog.fine(LOG, "sound", "switchScreenMusic() — utwór już gra, pomijam");
+            applyLobbyVolume();
+            return;
+        }
+
+        lobbyActive = true;
+        if (lobbyPlayer != null) {
+            cancelLobbyCrossfade();
+            crossfadeLobbyToNext(lobbyPlayer, false);
+        } else {
+            cancelLobbyCrossfade();
+            startLobbyTrack(track);
+        }
     }
 
     /** Startuje pojedynczy utwór lobby i uzbraja crossfade przed końcem. */
@@ -344,7 +363,10 @@ public final class SoundManager {
         }
     }
 
-    private static String pickLobbyTrack(String avoid) {
+    private String pickLobbyTrack(String avoid) {
+        if (forcedTrack != null) {
+            return forcedTrack;
+        }
         if (LOBBY_TRACKS.length == 1) {
             return LOBBY_TRACKS[0];
         }
