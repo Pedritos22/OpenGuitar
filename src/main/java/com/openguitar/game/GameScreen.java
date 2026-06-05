@@ -80,12 +80,6 @@ public final class GameScreen {
      * do hit-line (charakterystyczny feel GH).
      */
     private static final double PERSPECTIVE_CURVE = 2.05;
-    /**
-     * Ile ms przed trafieniem nuta pojawia się na horyzoncie.
-     * Większa wartość = wcześniejszy spawn na autostradzie.
-     */
-    private static final int LOOK_AHEAD_MS = 1_650;
-
     /** Prędkość zjazdu nut już po minięciu hit-line (px/ms). */
     private static final double PAST_HIT_SPEED_PX_PER_MS = 0.45;
 
@@ -237,6 +231,9 @@ public final class GameScreen {
     // Odliczanie startowe (P3R) przed wpuszczeniem do gry oraz po wznowieniu z pauzy.
     // Podczas odliczania zegar i audio stoją — scena jest zamrożona, rysujemy overlay.
     private final boolean showHitPopups = GameSettings.get().showHitPopups();
+    private final boolean showComboPopups = GameSettings.get().showComboPopups();
+    private final boolean countdownOnResume = GameSettings.get().countdownOnResume();
+    private final int lookAheadMs;
     private final long countdownTotalNanos;
     private boolean countingDown = false;
     private long countdownStartNanos = -1;
@@ -253,6 +250,7 @@ public final class GameScreen {
 
         GameSettings settings = GameSettings.get();
         this.laneKeys = settings.laneKeys();
+        this.lookAheadMs = settings.noteLookAheadMs();
         int cdSeconds = settings.countdownSeconds();
         // Numery liczymy przez cdSeconds sekund, potem krótki błysk „GO!”.
         this.countdownTotalNanos = cdSeconds <= 0
@@ -1428,10 +1426,10 @@ public final class GameScreen {
      * Głębokość 0 = horyzont, 1 = hit-line. Mapowanie czasu używa krzywej
      * potęgowej, żeby nuty dłużej „siedziały” w oddali i przyspieszały wizualnie.
      */
-    private static double perspectiveDepthFromDt(int dtMs) {
-        if (dtMs >= LOOK_AHEAD_MS) return 0;
+    private double perspectiveDepthFromDt(int dtMs) {
+        if (dtMs >= lookAheadMs) return 0;
         if (dtMs <= 0) return 1;
-        double linear = 1.0 - (double) dtMs / LOOK_AHEAD_MS;
+        double linear = 1.0 - (double) dtMs / lookAheadMs;
         return Math.pow(linear, PERSPECTIVE_CURVE);
     }
 
@@ -1450,7 +1448,7 @@ public final class GameScreen {
      * Zwraca false, gdy nuta jest poza widocznym oknem ekranu.
      */
     private boolean computePlacement(int lane, int dtMs) {
-        if (dtMs > LOOK_AHEAD_MS || dtMs < -120) {
+        if (dtMs > lookAheadMs || dtMs < -120) {
             return false;
         }
         double depth;
@@ -1483,7 +1481,7 @@ public final class GameScreen {
         int comboVal = score.combo();
         int multVal = score.multiplier();
 
-        // Wykrycie zmiany wartości wyzwala efekt „pop” (czysto wizualne, nie dotyka punktacji).
+        // Zmiana wartości uruchamia krótką animację „pop” w HUD (tylko wizualnie).
         if (scoreVal != shownScore) { shownScore = scoreVal; scorePopNanos = nowNanos; }
         if (comboVal != shownCombo) { shownCombo = comboVal; comboPopNanos = nowNanos; }
         if (multVal  != shownMult)  { shownMult  = multVal;  multPopNanos  = nowNanos; }
