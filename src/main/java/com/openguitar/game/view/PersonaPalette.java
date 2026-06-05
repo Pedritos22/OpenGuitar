@@ -34,6 +34,45 @@ public final class PersonaPalette {
     public static final Color MISS        = Color.web("#ff5d73");
     public static final Color WARN        = Color.web("#ffb020");
     public static final Color COMBO       = Color.web("#ffd166");
+    /** Combo wysokie (50+) — różowo-magenta. */
+    public static final Color COMBO_HOT   = Color.web("#ff6bcb");
+    /** Combo legendarne (100+) — złoto-biel. */
+    public static final Color COMBO_LEGEND = Color.web("#fff4a8");
+
+    /**
+     * Kolor licznika / popupu combo wg aktualnego poziomu (narasta z combo).
+     */
+    public static Color comboColor(int combo) {
+        if (combo <= 0) {
+            return MUTED;
+        }
+        if (combo >= 100) {
+            return COMBO_LEGEND;
+        }
+        if (combo >= 50) {
+            return COMBO_HOT;
+        }
+        if (combo >= 30) {
+            return AQUA_BRIGHT;
+        }
+        if (combo >= 20) {
+            return ELECTRIC;
+        }
+        if (combo >= 10) {
+            return TEAL;
+        }
+        return COMBO;
+    }
+
+    /** Kolor mnożnika punktów (x1–x4). */
+    public static Color multiplierColor(int mult) {
+        return switch (mult) {
+            case 4 -> COMBO_HOT;
+            case 3 -> AQUA_BRIGHT;
+            case 2 -> TEAL;
+            default -> MUTED;
+        };
+    }
 
     /**
      * Kolory ścieżek — wszystkie w rodzinie błękit/cyjan/turkus, ale wyraźnie
