@@ -3,12 +3,8 @@ package com.openguitar.game.view;
 import javafx.scene.paint.Color;
 
 /**
- * Paleta kolorów w stylu Persona 3 Reload (czysta warstwa widoku).
- *
- * <p>Założenia barwne: głęboki błękit (Deep Blue), jasny cyjan/turkus
- * (Aqua/Teal), czysta biel i głęboka czerń jako kontrast. Wszystkie kolory
- * trzymamy jako {@code static final} — zero alokacji {@link Color} w pętli
- * renderowania.</p>
+ * Paleta kolorów UI w stylu Persona 3 Reload.
+ * Kolory jako {@code static final} — bez alokacji w pętli renderowania Canvas.
  */
 public final class PersonaPalette {
 
