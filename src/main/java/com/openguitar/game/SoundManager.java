@@ -95,7 +95,7 @@ public final class SoundManager {
     /** Odtwarza krótki efekt (bezpieczne z dowolnego wątku). */
     public void play(Sfx sfx) {
         GameLog.fine(LOG, "sound", "play(SFX) " + sfx.name());
-        playClip(sfx, SFX_VOL);
+        playClip(sfx, GameSettings.get().uiSfxVolumeScale());
     }
 
     /**
