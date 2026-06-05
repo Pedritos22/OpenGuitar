@@ -20,17 +20,17 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Punkt wejścia JavaFX. Steruje przepływem między ekranem menu a ekranem gry,
+ * Punkt wejścia JavaFX. Steruje przepływem: panel startowy → lista utworów → gra,
  * trzyma jeden {@link Stage} przez cały cykl życia aplikacji.
  *
  * <h3>Tryby uruchomienia</h3>
  * <pre>
- *   bez argumentu           -> menu (skanuje folder songs/)
+ *   bez argumentu           -> panel startowy (GRAJ -> lista utworów z songs/)
  *   audio (.mp3/.wav/.aiff) -> bezpośrednio do gry; jeśli brak JSON-a, najpierw generuje
  *   beatmap.json            -> bezpośrednio do gry
  * </pre>
  * Gdy aplikacja została uruchomiona z konkretnym utworem, po jego zakończeniu
- * okno się zamyka. Gdy z menu - po utworze wracamy do menu.
+ * okno się zamyka. W trybie normalnym po utworze wracamy do listy utworów.
  */
 public class GameApp extends Application {
 
