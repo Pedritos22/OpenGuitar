@@ -132,10 +132,16 @@ public final class SoundManager {
         }
     }
 
-    /** Uruchamia losową rotację muzyki lobby. */
-    public void startLobbyMusic() {
-        GameLog.event(LOG, "sound", "startLobbyMusic()");
-        runFx(this::startLobbyMusicFx);
+    /** Muzyka panelu startowego (utwór 1, zapętlony). */
+    public void playTitleMusic() {
+        GameLog.event(LOG, "sound", "playTitleMusic()");
+        runFx(() -> switchScreenMusic(TITLE_TRACK));
+    }
+
+    /** Muzyka listy utworów (utwór 2, zapętlony). */
+    public void playMenuMusic() {
+        GameLog.event(LOG, "sound", "playMenuMusic()");
+        runFx(() -> switchScreenMusic(MENU_TRACK));
     }
 
     /** Zatrzymuje muzykę menu — przed wejściem w rozgrywkę. */
