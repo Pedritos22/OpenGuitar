@@ -145,8 +145,8 @@ final class FloatingPopup {
                     null, 0, null, PersonaText.SLANT, TextAlignment.CENTER);
         }
 
-        // Poświata pod napisem (większe popupy) — drugi przebieg bez alokacji
         Font font = PersonaFonts.display(fontSize);
+        // Poświata pod napisem (combo / mnożnik) — rysowana przed właściwym tekstem.
         if (style == Style.MULTIPLIER || style == Style.COMBO) {
             PersonaText.draw(g, text, x, drawY + 2,
                     PersonaFonts.display(fontSize * 1.1),
@@ -154,10 +154,9 @@ final class FloatingPopup {
                     null, 0, null, PersonaText.SLANT, TextAlignment.CENTER);
         }
 
-        // Właściwy napis: pochył + gruby obrys + kontrastowy cień
         PersonaText.draw(g, text, x, drawY, font, color,
                 PersonaPalette.BLACK, Math.max(2.5, fontSize * 0.07),
-                PersonaPalette.alpha(PersonaPalette.AQUA, 0.5),
+                PersonaPalette.alpha(color, 0.48),
                 PersonaText.SLANT, TextAlignment.CENTER);
 
         g.restore();
