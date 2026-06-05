@@ -89,13 +89,13 @@ public class GameApp extends Application {
         MenuScreen menu = new MenuScreen(
                 SONGS_DIR,
                 this::launchGame,
-                this::shutdownApplication,
+                this::launchTitle,
                 stats
         );
         Scene menuScene = menu.getScene();
         showScene(menuScene, "OpenGuitar");
-        SoundManager.get().startLobbyMusic();
-        GameLog.event(LOG, "app", "launchMenu() — scena menu ustawiona, lobby start");
+        SoundManager.get().playMenuMusic();
+        GameLog.event(LOG, "app", "launchMenu() — scena menu ustawiona, muzyka 2 start");
         Platform.runLater(() -> {
             if (stage.getScene() == menuScene) {
                 menuScene.getRoot().requestFocus();
