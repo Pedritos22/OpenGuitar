@@ -350,7 +350,7 @@ Dwa utwory z classpath:
 3. Jeśli ten sam utwór — pomija restart (np. wyniki → lista utworów).
 4. Po wejściu w grę lobby zatrzymane (`enterGameplay()`).
 
-`startLobbyMusic()` (bez wymuszenia) nadal losuje między oboma utworami — używane tylko tam, gdzie nie ma przypisania per ekran.
+Losowa rotacja została usunięta — muzyka menu jest przypisana do ekranów i uruchamiana przez `playTitleMusic()` / `playMenuMusic()`.
 
 ### Muzyka wyników
 
