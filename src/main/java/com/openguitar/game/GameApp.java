@@ -71,16 +71,40 @@ public class GameApp extends Application {
             returnToMenuAfterSong = false;
             launchGame(fromArgs);
         } else {
-            launchMenu();
+            launchTitle();
         }
         GameLog.event(LOG, "app", "start() — okno gotowe");
         stage.show();
+        if (GameSettings.get().fullscreenOnStart()) {
+            stage.setFullScreen(true);
+            GameLog.fine(LOG, "app", "start() — pełny ekran z ustawień");
+        }
     }
 
     // --------------------------- menu / game switching ---------------------
 
+    private void launchTitle() {
+        GameLog.event(LOG, "app", "launchTitle() — panel startowy");
+        if (activeGame != null) {
+            GameLog.event(LOG, "app", "launchTitle() — zatrzymuję poprzedni GameScreen");
+            activeGame.stop();
+            activeGame = null;
+        }
+        TitleScreen title = new TitleScreen(this::launchMenu, this::shutdownApplication);
+        Scene titleScene = title.getScene();
+        showScene(titleScene, "OpenGuitar");
+        SoundManager.get().playTitleMusic();
+        GameLog.event(LOG, "app", "launchTitle() — scena tytułowa ustawiona, muzyka 1 start");
+        Platform.runLater(() -> {
+            if (stage.getScene() == titleScene) {
+                titleScene.getRoot().requestFocus();
+                GameLog.fine(LOG, "app", "launchTitle() — focus na panelu startowym");
+            }
+        });
+    }
+
     private void launchMenu() {
-        GameLog.event(LOG, "app", "launchMenu() — powrót do menu");
+        GameLog.event(LOG, "app", "launchMenu() — lista utworów");
         if (activeGame != null) {
             GameLog.event(LOG, "app", "launchMenu() — zatrzymuję poprzedni GameScreen");
             activeGame.stop();
