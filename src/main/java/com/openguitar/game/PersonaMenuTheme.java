@@ -201,29 +201,63 @@ public final class PersonaMenuTheme {
 
     /** Panel nakładki ustawień (jak historia, ale z innym akcentem). */
     public static String settingsPanel() {
-        return "-fx-background-color: linear-gradient(to bottom, #0a1d3a, #050b16);"
-             + "-fx-border-color: " + ACCENT + " " + BORDER + " " + BORDER + " " + BORDER_BRIGHT + ";"
-             + "-fx-border-width: 1 1 1 4;";
+        return settingsPanelCompact();
+    }
+
+    /** Lżejszy panel ustawień — cieńsza ramka, mniej „ciężki” gradient. */
+    public static String settingsPanelCompact() {
+        return "-fx-background-color: linear-gradient(to bottom, rgba(10, 29, 58, 0.94), rgba(5, 11, 22, 0.97));"
+             + "-fx-border-color: " + BORDER + " " + BORDER + " " + BORDER + " " + ACCENT + ";"
+             + "-fx-border-width: 1 1 1 2;";
     }
 
     /** Wiersz ustawienia (etykieta + kontrolka). */
     public static String settingRow() {
-        return "-fx-background-color: " + BG_ROW + ";"
-             + "-fx-border-color: transparent transparent transparent " + ACCENT + ";"
-             + "-fx-border-width: 0 0 0 3;"
-             + "-fx-padding: 10 14 10 14;";
+        return settingRowCompact();
     }
+
+    /** Cienki wiersz ustawienia — bez pełnego tła karty, tylko delikatna linia. */
+    public static String settingRowCompact() {
+        return "-fx-background-color: transparent;"
+             + "-fx-border-color: transparent transparent rgba(30, 74, 122, 0.45) transparent;"
+             + "-fx-border-width: 0 0 1 0;"
+             + "-fx-padding: 4 2 4 2;";
+    }
+
+    /** Grupa powiązanych wierszy (np. cztery ścieżki klawiszy). */
+    public static String settingGroup() {
+        return "-fx-background-color: rgba(8, 19, 38, 0.5);"
+             + "-fx-border-color: " + BORDER + ";"
+             + "-fx-border-width: 1;"
+             + "-fx-padding: 4 8 6 8;";
+    }
+
+    /** Nagłówek sekcji w panelu ustawień (mniejszy niż sectionLabel). */
+    public static String settingsSectionLabel() {
+        return "-fx-text-fill: " + TEXT_DIM + ";"
+             + "-fx-font-family: " + UI + ";"
+             + "-fx-font-weight: bold;"
+             + "-fx-font-size: 10px;";
+    }
+
+    /** Wysokość kompaktowych kontrolek w ustawieniach. */
+    public static final double SETTINGS_BTN_HEIGHT = 28;
 
     /** Klawiszowy „cap” pokazujący przypisany przycisk ścieżki. */
     public static String keyCap(boolean listening) {
-        String border = listening ? ACCENT_GLOW : BORDER_BRIGHT;
-        String bg = listening ? "rgba(125, 249, 255, 0.18)" : "rgba(0, 212, 255, 0.06)";
+        return keyCapCompact(listening);
+    }
+
+    /** Mniejszy key-cap do panelu ustawień. */
+    public static String keyCapCompact(boolean listening) {
+        String border = listening ? ACCENT_GLOW : BORDER;
+        String bg = listening ? "rgba(125, 249, 255, 0.14)" : "rgba(0, 212, 255, 0.04)";
         return "-fx-background-color: " + bg + ";"
-             + "-fx-text-fill: " + (listening ? ACCENT_GLOW : TEXT) + ";"
+             + "-fx-text-fill: " + (listening ? ACCENT_GLOW : TEXT_MUTED) + ";"
              + "-fx-font-family: " + UI + ";"
-             + "-fx-font-size: 14px;"
+             + "-fx-font-size: 12px;"
              + "-fx-font-weight: bold;"
-             + "-fx-padding: 0 12 0 12;"
+             + "-fx-padding: 0 8 0 8;"
              + "-fx-background-radius: 0;"
              + "-fx-border-color: " + border + ";"
              + "-fx-border-width: " + (listening ? 2 : 1) + ";"
@@ -233,7 +267,22 @@ public final class PersonaMenuTheme {
 
     /** Mały przycisk-stepper (np. +/- przy odliczaniu). */
     public static String stepperButton() {
-        return rowButtonOutline(ACCENT_GLOW, BORDER);
+        return stepperButtonCompact();
+    }
+
+    /** Kompaktowy stepper w ustawieniach. */
+    public static String stepperButtonCompact() {
+        return "-fx-background-color: rgba(0, 212, 255, 0.04);"
+             + "-fx-text-fill: " + ACCENT_GLOW + ";"
+             + "-fx-font-family: " + UI + ";"
+             + "-fx-font-size: 11px;"
+             + "-fx-font-weight: bold;"
+             + "-fx-padding: 0 8 0 8;"
+             + "-fx-background-radius: 0;"
+             + "-fx-border-color: " + BORDER + ";"
+             + "-fx-border-width: 1;"
+             + "-fx-border-radius: 0;"
+             + "-fx-cursor: hand;";
     }
 
     /** Suwak głośności w stylu P3R (akcent cyjanowy). */
