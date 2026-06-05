@@ -870,15 +870,9 @@ public final class GameScreen {
         score.registerMiss();
         spawnJudgmentPopup(lane, HitJudgment.MISS);
         SoundManager.get().playGameplay(SoundManager.Sfx.MISS);
-        if (prevCombo >= 5) {
+        if (showComboPopups && prevCombo >= 5) {
             popups.add(FloatingPopup.comboBreak(popupCenterX(), popupCenterY()));
         }
-    }
-
-    private static boolean isComboMilestone(int combo, int prevCombo) {
-        if (combo < 10 || combo <= prevCombo) return false;
-        if (combo % 10 == 0) return true;
-        return combo == 25 || combo == 50 || combo == 100;
     }
 
     private void spawnJudgmentPopup(int lane, HitJudgment judgment) {
@@ -1385,7 +1379,7 @@ public final class GameScreen {
         int cur = (int) currentTimeMs;
         int n = runtimeNotes.size();
         int lo = firstVisibleIndex(cur - 120);
-        int upper = cur + LOOK_AHEAD_MS;
+        int upper = cur + lookAheadMs;
         int hi = lo;
         while (hi < n && runtimeNotes.get(hi).note.timeMs() <= upper) {
             hi++;
@@ -1500,10 +1494,10 @@ public final class GameScreen {
         drawGlassPanel(g, rx, 10, 190, 80);
         PersonaText.plain(g, "COMBO", CANVAS_WIDTH - 26, 32, PersonaFonts.label(13),
                 PersonaPalette.AQUA, TextAlignment.RIGHT);
-        Color comboCol = comboVal > 0 ? PersonaPalette.COMBO : PersonaPalette.MUTED;
+        Color comboCol = PersonaPalette.comboColor(comboVal);
         drawPopNumber(g, String.valueOf(comboVal), CANVAS_WIDTH - 26, 72, 36,
                 popScale(nowNanos, comboPopNanos), comboCol, TextAlignment.RIGHT);
-        Color multCol = multVal > 1 ? PersonaPalette.AQUA_BRIGHT : PersonaPalette.MUTED;
+        Color multCol = PersonaPalette.multiplierColor(multVal);
         drawPopNumber(g, "x" + multVal, rx + 14, 72, 22,
                 popScale(nowNanos, multPopNanos), multCol, TextAlignment.LEFT);
 
