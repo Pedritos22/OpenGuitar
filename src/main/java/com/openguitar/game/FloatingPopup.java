@@ -62,13 +62,19 @@ final class FloatingPopup {
 
     static FloatingPopup multiplier(int mult, double centerX, double centerY) {
         long now = System.nanoTime();
+        Color color = PersonaPalette.multiplierColor(mult);
+        double size = switch (mult) {
+            case 4 -> 58;
+            case 3 -> 54;
+            default -> 52;
+        };
         return new FloatingPopup(
                 "x" + mult,
                 "MULTIPLIER",
                 centerX,
                 centerY,
-                PersonaPalette.AQUA_BRIGHT,
-                52,
+                color,
+                size,
                 now,
                 1_450_000_000L,
                 Style.MULTIPLIER);
@@ -76,13 +82,14 @@ final class FloatingPopup {
 
     static FloatingPopup combo(int combo, double centerX, double centerY) {
         long now = System.nanoTime();
-        double size = combo >= 50 ? 50 : 40;
+        Color color = PersonaPalette.comboColor(combo);
+        double size = combo >= 100 ? 58 : combo >= 50 ? 52 : combo >= 25 ? 46 : 40;
         return new FloatingPopup(
                 combo + " COMBO",
                 null,
                 centerX,
                 centerY - 28,
-                PersonaPalette.COMBO,
+                color,
                 size,
                 now,
                 1_150_000_000L,
