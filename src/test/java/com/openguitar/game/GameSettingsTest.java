@@ -51,6 +51,13 @@ class GameSettingsTest {
     }
 
     @Test
+    void uiSfxVolumeScaleShouldMatchPercent() {
+        GameSettings s = GameSettings.get();
+        s.setUiSfxVolume(72);
+        assertEquals(0.72, s.uiSfxVolumeScale(), 1e-9);
+    }
+
+    @Test
     void songVolumeScaleMatchesSoundManager() {
         GameSettings s = GameSettings.get();
         s.setSongMusicVolume(42);
