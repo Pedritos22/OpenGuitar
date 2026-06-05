@@ -51,6 +51,13 @@ class GameSettingsTest {
     }
 
     @Test
+    void uiSfxVolumeScaleShouldMatchPercent() {
+        GameSettings s = GameSettings.get();
+        s.setUiSfxVolume(72);
+        assertEquals(0.72, s.uiSfxVolumeScale(), 1e-9);
+    }
+
+    @Test
     void songVolumeScaleMatchesSoundManager() {
         GameSettings s = GameSettings.get();
         s.setSongMusicVolume(42);
@@ -81,6 +88,11 @@ class GameSettingsTest {
         s.setLobbyMusicVolume(30);
         s.setSongMusicVolume(70);
         s.setGameplayHitSfx(false);
+        s.setUiSfxVolume(55);
+        s.setReactionTimePreset(0);
+        s.setShowComboPopups(false);
+        s.setCountdownOnResume(false);
+        s.setFullscreenOnStart(true);
         s.setLaneKey(2, KeyCode.SPACE);
         s.save();
 
@@ -92,7 +104,38 @@ class GameSettingsTest {
         assertEquals(30, loaded.lobbyMusicVolume());
         assertEquals(70, loaded.songMusicVolume());
         assertFalse(loaded.gameplayHitSfx());
+        assertEquals(55, loaded.uiSfxVolume());
+        assertEquals(0, loaded.reactionTimePreset());
+        assertEquals(GameSettings.REACTION_TIME_MS[0], loaded.noteLookAheadMs());
+        assertFalse(loaded.showComboPopups());
+        assertFalse(loaded.countdownOnResume());
+        assertTrue(loaded.fullscreenOnStart());
         assertEquals(KeyCode.SPACE, loaded.laneKey(2));
+    }
+
+    @Test
+    void reactionTimePresetShouldClampAndCycle() {
+        GameSettings s = GameSettings.get();
+        s.setReactionTimePreset(99);
+        assertEquals(GameSettings.REACTION_TIME_MS.length - 1, s.reactionTimePreset());
+        assertEquals("1.2 s", s.reactionTimeLabel());
+
+        s.adjustReactionTimePreset(-1);
+        assertEquals("1.7 s", s.reactionTimeLabel());
+        s.adjustReactionTimePreset(-1);
+        assertEquals("2.2 s", s.reactionTimeLabel());
+        s.adjustReactionTimePreset(-1);
+        assertEquals("2.2 s", s.reactionTimeLabel());
+    }
+
+    @Test
+    void shouldLoadLegacyNoteSpeedProperty() throws Exception {
+        Path props = tempDir.resolve("settings.properties");
+        Files.writeString(props, "gameplay.note.speed=0\n");
+        GameSettings.resetForTests(props);
+        GameSettings s = GameSettings.get();
+        assertEquals(0, s.reactionTimePreset());
+        assertEquals("2.2 s", s.reactionTimeLabel());
     }
 
     @Test

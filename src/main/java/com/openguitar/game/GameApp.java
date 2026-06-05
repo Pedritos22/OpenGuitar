@@ -20,17 +20,17 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Punkt wejścia JavaFX. Steruje przepływem między ekranem menu a ekranem gry,
+ * Punkt wejścia JavaFX. Steruje przepływem: panel startowy → lista utworów → gra,
  * trzyma jeden {@link Stage} przez cały cykl życia aplikacji.
  *
  * <h3>Tryby uruchomienia</h3>
  * <pre>
- *   bez argumentu           -> menu (skanuje folder songs/)
+ *   bez argumentu           -> panel startowy (GRAJ -> lista utworów z songs/)
  *   audio (.mp3/.wav/.aiff) -> bezpośrednio do gry; jeśli brak JSON-a, najpierw generuje
  *   beatmap.json            -> bezpośrednio do gry
  * </pre>
  * Gdy aplikacja została uruchomiona z konkretnym utworem, po jego zakończeniu
- * okno się zamyka. Gdy z menu - po utworze wracamy do menu.
+ * okno się zamyka. W trybie normalnym po utworze wracamy do listy utworów.
  */
 public class GameApp extends Application {
 
@@ -71,16 +71,40 @@ public class GameApp extends Application {
             returnToMenuAfterSong = false;
             launchGame(fromArgs);
         } else {
-            launchMenu();
+            launchTitle();
         }
         GameLog.event(LOG, "app", "start() — okno gotowe");
         stage.show();
+        if (GameSettings.get().fullscreenOnStart()) {
+            stage.setFullScreen(true);
+            GameLog.fine(LOG, "app", "start() — pełny ekran z ustawień");
+        }
     }
 
     // --------------------------- menu / game switching ---------------------
 
+    private void launchTitle() {
+        GameLog.event(LOG, "app", "launchTitle() — panel startowy");
+        if (activeGame != null) {
+            GameLog.event(LOG, "app", "launchTitle() — zatrzymuję poprzedni GameScreen");
+            activeGame.stop();
+            activeGame = null;
+        }
+        TitleScreen title = new TitleScreen(this::launchMenu, this::shutdownApplication);
+        Scene titleScene = title.getScene();
+        showScene(titleScene, "OpenGuitar");
+        SoundManager.get().playTitleMusic();
+        GameLog.event(LOG, "app", "launchTitle() — scena tytułowa ustawiona, muzyka 1 start");
+        Platform.runLater(() -> {
+            if (stage.getScene() == titleScene) {
+                titleScene.getRoot().requestFocus();
+                GameLog.fine(LOG, "app", "launchTitle() — focus na panelu startowym");
+            }
+        });
+    }
+
     private void launchMenu() {
-        GameLog.event(LOG, "app", "launchMenu() — powrót do menu");
+        GameLog.event(LOG, "app", "launchMenu() — lista utworów");
         if (activeGame != null) {
             GameLog.event(LOG, "app", "launchMenu() — zatrzymuję poprzedni GameScreen");
             activeGame.stop();
@@ -89,13 +113,13 @@ public class GameApp extends Application {
         MenuScreen menu = new MenuScreen(
                 SONGS_DIR,
                 this::launchGame,
-                this::shutdownApplication,
+                this::launchTitle,
                 stats
         );
         Scene menuScene = menu.getScene();
         showScene(menuScene, "OpenGuitar");
-        SoundManager.get().startLobbyMusic();
-        GameLog.event(LOG, "app", "launchMenu() — scena menu ustawiona, lobby start");
+        SoundManager.get().playMenuMusic();
+        GameLog.event(LOG, "app", "launchMenu() — scena menu ustawiona, muzyka 2 start");
         Platform.runLater(() -> {
             if (stage.getScene() == menuScene) {
                 menuScene.getRoot().requestFocus();

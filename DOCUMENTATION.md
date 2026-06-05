@@ -28,12 +28,12 @@ Ten dokument opisuje architekturę, algorytmy i konwencje projektu. Do szybkiego
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                          GameApp (JavaFX)                        │
-│  Stage ──► MenuScreen ◄──► GameScreen                            │
-│              │                    │                              │
-│         SongLibrary          MediaPlayer (utwór) + AnimationTimer│
-│         StatsStore           ScoreState + HitJudgment            │
-│         GameSettings         Canvas (render tylko odczytuje stan)│
-│         SoundManager ◄──────► lobby / SFX / muzyka wyników       │
+│  Stage ──► TitleScreen ──► MenuScreen ◄──► GameScreen            │
+│              │                 │                    │            │
+│         SettingsOverlay    SongLibrary          MediaPlayer      │
+│         (wspólna)          StatsStore           ScoreState       │
+│                            GameSettings         Canvas render    │
+│         SoundManager ◄──── lobby per ekran / SFX / wyniki        │
 └──────────────────────────────────────────────────────────────────┘
                               ▲
                               │ SongContext (JSON)
@@ -52,7 +52,7 @@ Ten dokument opisuje architekturę, algorytmy i konwencje projektu. Do szybkiego
 | Muzyka aplikacji | `SoundManager` | `src/main/resources/sound/` | Menu, wyniki, SFX |
 | Muzyka utworu | `GameScreen` → `MediaPlayer` | pliki w `songs/` | Rozgrywka |
 
-Przy wejściu w utwór `SoundManager.enterGameplay()` zatrzymuje muzykę lobby; po powrocie do menu `startLobbyMusic()` wznawia rotację.
+Przy wejściu w utwór `SoundManager.enterGameplay()` zatrzymuje muzykę lobby; po powrocie do listy utworów `playMenuMusic()`, do panelu startowego `playTitleMusic()`.
 
 ---
 
@@ -151,12 +151,15 @@ mvn -q exec:java -Dexec.args="--demo /tmp/openguitar-demo"
 
 | Klasa | Rola |
 |-------|------|
-| `GameApp` | `Application`, przełączanie scen, fullscreen F11, CLI args, cykl życia `SoundManager` |
-| `MenuScreen` | Lista utworów, generacja beatmapy w tle, statystyki, historia, ustawienia (scroll) |
-| `GameScreen` | Canvas, input, audio sync, pauza, countdown, ekran wyników |
-| `SoundManager` | Muzyka lobby/wyników, SFX UI i rozgrywki (singleton) |
+| `GameApp` | `Application`, przełączanie scen (tytuł → menu → gra), fullscreen F11, CLI args, cykl życia `SoundManager` |
+| `TitleScreen` | Panel startowy P3R: GRAJ / USTAWIENIA / WYJŚCIE |
+| `MenuScreen` | Lista utworów, generacja beatmapy w tle, statystyki, historia, powrót do tytułu |
+| `SettingsOverlay` | Wspólna nakładka ustawień (tytuł + lista utworów), sekcje w `ScrollPane` |
+| `GameScreen` | Canvas, input, audio sync, pauza, countdown, ekran wyników, popupy combo |
+| `ComboMilestones` | Progi popupów combo (co 10, plus 25 / 50 / 100) |
+| `SoundManager` | Muzyka lobby per ekran, wyniki, SFX UI i rozgrywki (singleton) |
 | `StatsStore` | SQLite: agregaty + historia podejść |
-| `GameSettings` | `settings.properties`: klawisze, audio, countdown, popupy |
+| `GameSettings` | `settings.properties`: klawisze, audio, countdown, czas na reakcję, popupy |
 | `GameLog` | Spójne logi `java.util.logging` z prefiksem `[komponent][FX\|BG]` |
 | `SongLibrary` | Skan `songs/`, dopasowanie audio ↔ JSON |
 
@@ -169,13 +172,13 @@ Pakiet **wyłącznie wizualny** — nie importuje logiki punktacji poza kolorami
 | Klasa | Funkcja |
 |-------|---------|
 | `PersonaFonts` | Jednorazowe ładowanie Bebas Neue + Rajdhani, cache instancji |
-| `PersonaPalette` | Stałe kolory (deep blue, aqua, lane tints) |
+| `PersonaPalette` | Stałe kolory (deep blue, aqua, lane tints), `comboColor()` / `multiplierColor()` |
 | `PersonaText` | Tekst na Canvas: pochył (shear), obrys, cień — bez kosztownych `Effect` |
 | `CrystalNote` | Geometria kryształowych nut i receptorów |
 | `PersonaMenuFx` | Shear + hover slide na węzłach JavaFX (klikalność zachowana) |
 | `FullscreenScaler` | Skalowanie letterbox do rozmiaru okna |
 
-Menu używa JavaFX Scene Graph (`MenuScreen`, `PersonaMenuTheme`). Rozgrywka używa Canvas (`GameScreen`) dla wydajności. Panel ustawień ma przewijaną treść (`ScrollPane`).
+Menu i panel startowy używają JavaFX Scene Graph (`TitleScreen`, `MenuScreen`, `PersonaMenuTheme`). Rozgrywka używa Canvas (`GameScreen`) dla wydajności. Ustawienia w `SettingsOverlay` — przewijana treść (`ScrollPane`), wysokość panelu ograniczona `USE_PREF_SIZE` (bez rozciągania na całe okno).
 
 ---
 
@@ -259,6 +262,38 @@ Nuty, które minęły hit-line + okno bez naciśnięcia, stają się MISS w `mar
 
 `multiplier = 1 + min(combo / 10, 3)` — maksymalnie ×4 przy combo ≥ 30.
 
+### Popupy combo i kolory HUD
+
+Gdy `popups.combo=true`, `GameScreen` pokazuje komunikaty przy progach z `ComboMilestones.popupAt()`:
+
+- co **10** trafień (10, 20, 30, …);
+- dodatkowo przy **25**, **50**, **100** (bez powtórzenia przy tym samym combo).
+
+Kolory licznika combo, mnożnika i popupów rosną z poziomem (`PersonaPalette.comboColor()` / `multiplierColor()`):
+
+| Próg combo | Kolor (skrót) |
+|------------|---------------|
+| 1–9 | żółty (`COMBO`) |
+| 10–19 | turkus (`TEAL`) |
+| 20–29 | niebieski (`ELECTRIC`) |
+| 30–49 | jasny cyjan (`AQUA_BRIGHT`) |
+| 50–99 | magenta (`COMBO_HOT`) |
+| 100+ | złoto (`COMBO_LEGEND`) |
+
+Mnożnik ×2–×4: turkus → jasny cyjan → magenta.
+
+### Czas na reakcję
+
+`GameSettings.noteLookAheadMs()` — jak wcześnie nuty wjeżdżają na tor (nie zmienia tempa utworu):
+
+| Preset | Ms | Etykieta UI |
+|--------|-----|-------------|
+| 0 | 2200 | 2,2 s |
+| 1 (domyślny) | 1650 | 1,7 s |
+| 2 | 1200 | 1,2 s |
+
+Klucz `gameplay.reaction.time` (legacy: `gameplay.note.speed`).
+
 ### Ranga (S–E)
 
 Celność ważona: `accuracy = (perfect + great × 0.6) / totalNotes`.
@@ -301,17 +336,21 @@ Singleton zarządzający muzyką aplikacji i krótkimi efektami. Bezpieczny wzgl
 
 ### Muzyka lobby
 
-Rotacja między dwoma utworami z classpath:
+Dwa utwory z classpath:
 
-- `/sound/song_lobby.mp3`
-- `/sound/song_ending.mp3`
+| Utwór | Plik | Ekran |
+|-------|------|-------|
+| 1 | `/sound/song_lobby.mp3` | Panel startowy (`playTitleMusic()`) |
+| 2 | `/sound/song_ending.mp3` | Lista utworów (`playMenuMusic()`), ekran wyników |
 
-**Algorytm:**
+**Przełączenie ekranu** (`switchScreenMusic()`):
 
-1. Losowy wybór utworu (bez dwóch tych samych z rzędu).
-2. ~**2.8 s** przed końcem bieżącego utworu startuje **crossfade** (`Timeline` + `KeyValue` na `volumeProperty`).
-3. Stary utwór wygasa 0→target, nowy wchodzi 0→target — bez twardego cięcia.
-4. Po wejściu w grę rotacja zatrzymana (`enterGameplay()`).
+1. Ustawia `forcedTrack` na utwór docelowego ekranu.
+2. Jeśli inny utwór już gra — **crossfade** ~**2,8 s** (`Timeline` + `KeyValue` na `volumeProperty`).
+3. Jeśli ten sam utwór — pomija restart (np. wyniki → lista utworów).
+4. Po wejściu w grę lobby zatrzymane (`enterGameplay()`).
+
+Losowa rotacja została usunięta — muzyka menu jest przypisana do ekranów i uruchamiana przez `playTitleMusic()` / `playMenuMusic()`.
 
 ### Muzyka wyników
 
@@ -333,19 +372,20 @@ Pliki WAV w `src/main/resources/sound/` (Kenney UI Audio, CC0):
 
 ### Rozdzielenie SFX w grze
 
-| Metoda | Respektuje `gameplayHitSfx` | Opis |
-|--------|----------------------------|------|
-| `play(Sfx)` | nie | Menu, pauza, odliczanie, UI |
-| `playGameplay(Sfx)` | tak | PERFECT, GREAT, MISS, COMBO |
+| Metoda | Respektuje przełącznik | Opis |
+|--------|------------------------|------|
+| `play(Sfx)` | nie (głośność: `uiSfxVolumeScale()`) | Menu, pauza, odliczanie, UI |
+| `playGameplay(Sfx)` | `audio.gameplay.sfx` | PERFECT, GREAT, MISS, COMBO |
 
 PERFECT, GREAT, MISS i COMBO — dedykowane pliki `sfx_perfect.wav`, `sfx_great.wav` itd. (bez współdzielonego `AudioClip` z `setRate`, żeby uniknąć kolizji odtworzeń). `CLICK_GLASS` służy wyłącznie UI (menu, ustawienia).
 
 ### Głośność
 
-| Suwak w ustawieniach | Wpływ |
-|---------------------|-------|
-| Głośność muzyki lobby | `SoundManager` — lobby, crossfade, wyniki |
-| Głośność piosenek | `GameScreen` → `MediaPlayer` utworu z `songs/` |
+| Suwak w ustawieniach | Klucz | Wpływ |
+|---------------------|-------|-------|
+| Głośność muzyki lobby | `audio.lobby.volume` | `SoundManager` — lobby, crossfade, wyniki |
+| Głośność piosenek | `audio.song.volume` | `GameScreen` → `MediaPlayer` utworu z `songs/` |
+| Głośność efektów UI | `audio.ui.sfx.volume` | `SoundManager.play()` — kliki, nawigacja, odliczanie w menu |
 
 Skala: **0–100% → 0.0–1.0** bez ukrytych mnożników. Zmiana lobby działa na żywo (`refreshLobbyVolume()`).
 
@@ -362,21 +402,32 @@ lane.2=J
 lane.3=K
 countdown.seconds=3
 popups.hits=true
+popups.combo=true
 audio.lobby.volume=100
 audio.song.volume=100
+audio.ui.sfx.volume=72
 audio.gameplay.sfx=true
+gameplay.reaction.time=1
+gameplay.countdown.resume=true
+display.fullscreen.start=false
 ```
 
 | Klucz | Domyślnie | Opis |
 |-------|-----------|------|
 | `lane.0` … `lane.3` | D, F, J, K | `KeyCode` JavaFX |
-| `countdown.seconds` | 3 | 0–5; 0 = brak odliczania |
+| `countdown.seconds` | 3 | 0–5; 0 = brak odliczania przed startem |
 | `popups.hits` | true | Komunikaty PERFECT/GREAT/MISS nad autostradą |
+| `popups.combo` | true | Popup combo / mnożnika / zerwania combo |
 | `audio.lobby.volume` | 100 | Głośność muzyki menu i wyników (0–100) |
 | `audio.song.volume` | 100 | Głośność utworu w rozgrywce (0–100) |
+| `audio.ui.sfx.volume` | 72 | Głośność SFX UI menu (klik, nawigacja) |
 | `audio.gameplay.sfx` | true | Dźwięki trafień (PERFECT/GREAT/MISS/combo) |
+| `gameplay.reaction.time` | 1 | Preset czasu na reakcję (0–2 → 2200/1650/1200 ms) |
+| `gameplay.note.speed` | — | Legacy — mapowany na `gameplay.reaction.time` |
+| `gameplay.countdown.resume` | true | Odliczanie po wznowieniu z pauzy (gdy countdown > 0) |
+| `display.fullscreen.start` | false | Pełny ekran zaraz po `stage.show()` |
 
-Edycja w menu (⚙). Panel przewijany (`ScrollPane`). Przy przypisaniu zajętego klawisza następuje **swap** między ścieżkami. Po ręcznej edycji pliku duplikaty klawiszy są naprawiane przy wczytaniu (`dedupeKeys`). Głośność lobby — suwak z natychmiastowym efektem; głośność piosenek — od następnego startu utworu. Zapis przy zamknięciu panelu (ESC).
+Edycja w nakładce ⚙ (panel startowy lub lista utworów). Panel przewijany (`ScrollPane`). Przy przypisaniu zajętego klawisza następuje **swap** między ścieżkami. Po ręcznej edycji pliku duplikaty klawiszy są naprawiane przy wczytaniu (`dedupeKeys`). Głośność lobby i UI SFX — natychmiast; głośność piosenek — od następnego startu utworu. Zapis przy zamknięciu panelu (ESC).
 
 `GameSettings.resetForTests(Path)` — wyłącznie dla testów JUnit (nadpisanie ścieżki pliku, reset singletonu).
 
@@ -385,24 +436,26 @@ Edycja w menu (⚙). Panel przewijany (`ScrollPane`). Przy przypisaniu zajętego
 ## 10. Przepływ aplikacji
 
 ```
-┌──────────────┐  Graj / Generuj   ┌──────────────┐
-│  MenuScreen  │ ────────────────► │  GameScreen  │
-│  + lobby BGM │                   │  + utwór     │
-│  ⚙ ustawienia│  ◄── wyniki ──── │  countdown   │
-│  historia H  │      ENTER        │  gra + pauza │
-└──────────────┘                   └──────────────┘
-        ▲                                   │
-        └──────── ESC (wyjście z pauzy) ────┘
-              SoundManager.startLobbyMusic()
+┌──────────────┐  GRAJ            ┌──────────────┐  Graj / Generuj   ┌──────────────┐
+│ TitleScreen  │ ───────────────► │  MenuScreen  │ ────────────────► │  GameScreen  │
+│ song_lobby   │                  │ song_ending  │                   │  + utwór     │
+│ USTAWIENIA   │  ◄── Powrót ──── │ ⚙ ustawienia │  ◄── wyniki ──── │  countdown   │
+│ WYJŚCIE      │      ESC         │ historia H   │      ENTER        │  gra + pauza │
+└──────────────┘                  └──────────────┘                   └──────────────┘
+       │                                  ▲                                   │
+       │ quit                             └──────── ESC (wyjście z pauzy) ────┘
+       ▼                                        SoundManager.playMenuMusic()
+  shutdownApplication()
 ```
 
-1. **Menu** — skan `songs/`, wybór utworu, opcjonalna generacja beatmapy (`Task` w tle); rotacja muzyki lobby.
-2. **Countdown** — zamrożona scena, potem start audio utworu.
-3. **Gra** — pętla `AnimationTimer`: clock → miss check → render; SFX trafień opcjonalne.
-4. **Pauza (ESC)** — overlay P3R, audio w pause; wznowienie przez countdown.
-5. **Koniec utworu** — animowany ekran wyników + `song_ending` → `GameResult` → `StatsStore.record()` → menu.
+1. **Panel startowy** — `TitleScreen`: GRAJ → lista, USTAWIENIA → `SettingsOverlay`, WYJŚCIE → zamknięcie; `playTitleMusic()`.
+2. **Lista utworów** — skan `songs/`, wybór utworu, generacja beatmapy (`Task` w tle); `playMenuMusic()`; Powrót/ESC → tytuł.
+3. **Countdown** — zamrożona scena, potem start audio utworu (`countdownOnResume` po pauzie).
+4. **Gra** — pętla `AnimationTimer`: clock → miss check → render; `noteLookAheadMs()` z ustawień; SFX trafień opcjonalne.
+5. **Pauza (ESC)** — overlay P3R, audio w pause; wznowienie z opcjonalnym odliczaniem.
+6. **Koniec utworu** — animowany ekran wyników + `song_ending` → `GameResult` → `StatsStore.record()` → lista utworów.
 
-CLI (`./play.sh utwor.mp3`) pomija menu; okno zamyka się po utworze.
+CLI (`./play.sh utwor.mp3`) pomija tytuł i menu; okno zamyka się po utworze. `fullscreenOnStart` — po `stage.show()` w trybie normalnym.
 
 ---
 
@@ -422,7 +475,7 @@ CLI (`./play.sh utwor.mp3`) pomija menu; okno zamyka się po utworze.
 ## 12. Testy
 
 ```bash
-mvn test                    # cały zestaw (obecnie 65 testów)
+mvn test                    # cały zestaw (obecnie 74 testy)
 mvn test -Dtest=GameSettingsTest,RankTest   # wybrane klasy
 ```
 
@@ -443,7 +496,9 @@ mvn test -Dtest=GameSettingsTest,RankTest   # wybrane klasy
 | `RankTest` | Progi S–E, full combo, `GameResult.accuracy()` |
 | `SongLibraryTest` | Skan `songs/`, beatmapy, uszkodzony JSON |
 | `StatsStoreTest` | SQLite agregaty, historia, fallback rangi |
-| `GameSettingsTest` | Clamp, swap klawiszy, round-trip `settings.properties` |
+| `GameSettingsTest` | Clamp, swap klawiszy, czas na reakcję, legacy `note.speed`, round-trip `settings.properties` |
+| `ComboMilestonesTest` | Progi popupów combo (10, 25, 50, 100) |
+| `PersonaPaletteTest` | `comboColor()`, `multiplierColor()`, `alpha()` |
 | `GameLogTest` | Format logów, poziomy, wyjątki |
 
 ### Syntetyczne audio w testach
@@ -477,9 +532,12 @@ src/main/java/com/openguitar/
 │
 └── game/
     ├── GameApp.java            # Application entry
+    ├── TitleScreen.java        # panel startowy
+    ├── MenuScreen.java         # lista utworów (JavaFX nodes)
+    ├── SettingsOverlay.java    # nakładka ustawień
     ├── GameScreen.java         # rozgrywka (Canvas)
-    ├── MenuScreen.java         # menu (JavaFX nodes)
-    ├── SoundManager.java       # muzyka lobby, SFX, wyniki
+    ├── ComboMilestones.java    # progi popupów combo
+    ├── SoundManager.java       # muzyka lobby per ekran, SFX, wyniki
     ├── GameLog.java            # format logów diagnostycznych
     ├── GameSettings.java       # settings.properties
     ├── StatsStore.java         # SQLite
@@ -513,8 +571,8 @@ src/main/resources/
 ├── images/menu-logo.png
 ├── logging.properties          # poziom logów com.openguitar.*
 └── sound/
-    ├── song_lobby.mp3          # muzyka menu
-    ├── song_ending.mp3         # lobby (rotacja) + ekran wyników
+    ├── song_lobby.mp3          # panel startowy
+    ├── song_ending.mp3         # lista utworów + ekran wyników
     ├── sfx_*.wav               # Kenney UI Audio (CC0)
     └── KENNEY_UI_AUDIO_LICENSE.txt
 ```

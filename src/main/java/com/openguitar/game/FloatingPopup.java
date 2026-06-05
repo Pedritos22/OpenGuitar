@@ -62,13 +62,19 @@ final class FloatingPopup {
 
     static FloatingPopup multiplier(int mult, double centerX, double centerY) {
         long now = System.nanoTime();
+        Color color = PersonaPalette.multiplierColor(mult);
+        double size = switch (mult) {
+            case 4 -> 58;
+            case 3 -> 54;
+            default -> 52;
+        };
         return new FloatingPopup(
                 "x" + mult,
                 "MULTIPLIER",
                 centerX,
                 centerY,
-                PersonaPalette.AQUA_BRIGHT,
-                52,
+                color,
+                size,
                 now,
                 1_450_000_000L,
                 Style.MULTIPLIER);
@@ -76,13 +82,14 @@ final class FloatingPopup {
 
     static FloatingPopup combo(int combo, double centerX, double centerY) {
         long now = System.nanoTime();
-        double size = combo >= 50 ? 50 : 40;
+        Color color = PersonaPalette.comboColor(combo);
+        double size = combo >= 100 ? 58 : combo >= 50 ? 52 : combo >= 25 ? 46 : 40;
         return new FloatingPopup(
                 combo + " COMBO",
                 null,
                 centerX,
                 centerY - 28,
-                PersonaPalette.COMBO,
+                color,
                 size,
                 now,
                 1_150_000_000L,
@@ -138,8 +145,8 @@ final class FloatingPopup {
                     null, 0, null, PersonaText.SLANT, TextAlignment.CENTER);
         }
 
-        // Poświata pod napisem (większe popupy) — drugi przebieg bez alokacji
         Font font = PersonaFonts.display(fontSize);
+        // Poświata pod napisem (combo / mnożnik) — rysowana przed właściwym tekstem.
         if (style == Style.MULTIPLIER || style == Style.COMBO) {
             PersonaText.draw(g, text, x, drawY + 2,
                     PersonaFonts.display(fontSize * 1.1),
@@ -147,10 +154,9 @@ final class FloatingPopup {
                     null, 0, null, PersonaText.SLANT, TextAlignment.CENTER);
         }
 
-        // Właściwy napis: pochył + gruby obrys + kontrastowy cień
         PersonaText.draw(g, text, x, drawY, font, color,
                 PersonaPalette.BLACK, Math.max(2.5, fontSize * 0.07),
-                PersonaPalette.alpha(PersonaPalette.AQUA, 0.5),
+                PersonaPalette.alpha(color, 0.48),
                 PersonaText.SLANT, TextAlignment.CENTER);
 
         g.restore();

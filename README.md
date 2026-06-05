@@ -3,7 +3,7 @@
 [![Java](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Maven](https://img.shields.io/badge/Maven-3.9+-C71A36?logo=apachemaven&logoColor=white)](https://maven.apache.org/)
 [![JavaFX](https://img.shields.io/badge/JavaFX-21-FF6A00?logo=java&logoColor=white)](https://openjfx.io/)
-[![Tests](https://img.shields.io/badge/Tests-65-25A162?logo=junit5&logoColor=white)](DOCUMENTATION.md#12-testy)
+[![Tests](https://img.shields.io/badge/Tests-74-25A162?logo=junit5&logoColor=white)](DOCUMENTATION.md#12-testy)
 [![GitHub](https://img.shields.io/badge/GitHub-OpenGuitar-181717?logo=github)](https://github.com/Pedritos22/OpenGuitar)
 
 Klon **Guitar Hero** na desktop — Java 21, Maven, JavaFX. Projekt akademicki składający się z dwóch modułów:
@@ -41,7 +41,24 @@ Szczegóły techniczne (architektura, synchronizacja audio, format plików, test
    ./play.sh
    ```
 
-3. W menu wybierz utwór i kliknij **Graj** (lub **Generuj**, jeśli brak beatmapy `.json`).
+3. Na ekranie tytułowym wybierz **GRAJ**, potem utwór z listy i kliknij **Graj** (lub **Generuj**, jeśli brak beatmapy `.json`).
+
+### Przepływ ekranów
+
+```
+Panel startowy (GRAJ / USTAWIENIA / WYJŚCIE)
+    │ GRAJ
+    ▼
+Lista utworów (+ statystyki, historia, ustawienia)
+    │ Graj
+    ▼
+Rozgrywka → ekran wyników → lista utworów
+    │ Powrót / ESC (z listy)
+    ▼
+Panel startowy
+```
+
+Zamykanie aplikacji (**WYJŚCIE**) jest tylko z panelu startowego.
 
 ### Sterowanie w grze
 
@@ -51,37 +68,65 @@ Szczegóły techniczne (architektura, synchronizacja audio, format plików, test
 | Pauza | **ESC** → menu pauzy (Wznów / Wyjdź do menu) |
 | Pełny ekran | **F11** (zachowywany przy przejściu menu ↔ gra) |
 
-Przed startem utworu (i po wznowieniu z pauzy) pojawia się **odliczanie 3→2→1→GO!** — czas na ustawienie palców. Długość można zmienić w ustawieniach (0 = wyłączone).
+Przed startem utworu pojawia się **odliczanie 3→2→1→GO!** — długość ustawiasz w ustawieniach (0 = wyłączone). Po wznowieniu z pauzy odliczanie można włączyć osobnym przełącznikiem.
 
-Po zakończeniu utworu wyświetla się **animowany ekran wyników** (PERFECT / GREAT / MISS, combo, celność, ranga S–E). **ENTER** wraca do menu.
+Po zakończeniu utworu wyświetla się **animowany ekran wyników** (PERFECT / GREAT / MISS, combo, celność, ranga S–E). **ENTER** wraca do listy utworów.
 
-### Menu główne
+### Panel startowy i lista utworów
 
-- **Lista utworów** — kliknij wiersz, aby zaznaczyć; strzałki + Enter też działają.
-- **Statystyki** — panel u góry pokazuje dane wybranego utworu (podejścia, rekord, combo).
-- **Ranga** — litera S–E obok tytułu (najlepszy wynik).
-- **Historia** — ostatnie podejścia dla zaznaczonego utworu (przycisk lub klawisz **H**).
-- **⚙ Ustawienia** — klawisze ścieżek, głośność, dźwięki trafień, odliczanie, komunikaty wizualne (panel przewijany).
-- **Odśwież** — ponowny skan folderu `songs/`.
+**Panel startowy**
+
+- **GRAJ** — przejście do listy utworów
+- **USTAWIENIA** — ten sam panel co na liście (klawisze, dźwięk, rozgrywka, wyświetlanie)
+- **WYJŚCIE** — zamknięcie aplikacji
+- Nawigacja: strzałki, Enter, mysz (hover + klik)
+
+**Lista utworów**
+
+- Kliknij wiersz, aby zaznaczyć; strzałki + Enter też działają
+- **Statystyki** — panel u góry (podejścia, rekord, combo wybranego utworu)
+- **Ranga** — litera S–E obok tytułu (najlepszy wynik)
+- **Historia** — ostatnie podejścia (przycisk lub **H**)
+- **⚙ Ustawienia** — patrz sekcja poniżej
+- **Powrót** / **ESC** — wraca do panelu startowego
+- **Odśwież** — ponowny skan folderu `songs/`
+
+### Ustawienia (⚙)
+
+Panel jest wspólny dla panelu startowego i listy utworów. Sekcje:
+
+| Sekcja | Opcje |
+|--------|--------|
+| **STEROWANIE** | Przypisanie klawiszy do 4 ścieżek |
+| **DŹWIĘK** | Głośność lobby, głośność utworów w grze, głośność efektów UI menu, dźwięki trafień w rozgrywce |
+| **ROZGRYWKA** | Czas na reakcję (2,2 s / 1,7 s / 1,2 s — jak wcześnie nuty wjeżdżają na tor), odliczanie przed startem, odliczanie po wznowieniu z pauzy, komunikaty trafień (PERFECT/GREAT/MISS), komunikaty combo i mnożnika |
+| **WYŚWIETLANIE** | Pełny ekran przy starcie aplikacji |
+
+Wartości zapisują się w `settings.properties` (m.in. `gameplay.reaction.time`, `audio.ui.sfx.volume`, `popups.combo`, `gameplay.countdown.resume`, `display.fullscreen.start`).
 
 ### Dźwięk
 
 | Kontekst | Co słychać |
 |----------|------------|
-| **Menu (lobby)** | Losowa rotacja `song_lobby` / `song_ending` z płynnym crossfade'm |
+| **Panel startowy** | `song_lobby.mp3` |
+| **Lista utworów** | `song_ending.mp3` |
 | **Gra** | Odtwarzany utwór z folderu `songs/` (głośność w ustawieniach) |
-| **Wyniki** | `song_ending` w pętli |
-| **UI** | Szklane kliki, nawigacja, odliczanie, pauza |
+| **Wyniki** | `song_ending.mp3` w pętli |
+| **UI** | Szklane kliki, nawigacja, odliczanie, pauza (głośność efektów UI w ustawieniach) |
 | **Trafienia** | Dźwięki PERFECT/GREAT/MISS/combo (można wyłączyć w ustawieniach) |
 
-Głośność lobby i piosenek regulujesz suwakami w **⚙ Ustawienia → DŹWIĘK**.
+Przejścia między panelem startowym a listą utworów robią krótki crossfade między utworami lobby.
+
+### Combo i kolory
+
+Licznik combo i mnożnik w HUD oraz wyskakujące komunikaty zmieniają kolor wraz z progiem (np. turkus od 10, niebieski od 20, jaśniejszy cyjan od 30, pomarańcz od 50, złoto od 100). Popup combo pojawia się co 10 trafień oraz przy 25, 50 i 100.
 
 ---
 
 ## Tryby uruchomienia
 
 ```bash
-./play.sh                              # menu (domyślne)
+./play.sh                              # panel startowy (domyślne)
 ./play.sh songs/utwor.mp3              # od razu gra (auto-generacja beatmapy)
 ./play.sh songs/utwor.json             # gra z gotową mapą
 ./play.sh songs/utwor.mp3 --regen      # wymuś regenerację beatmapy
@@ -95,7 +140,7 @@ Równoważne komendy Maven:
 ```bash
 mvn javafx:run
 mvn javafx:run -Djavafx.args="songs/utwor.json"
-mvn test                               # 65 testów jednostkowych (beatmap + gra)
+mvn test                               # testy jednostkowe (beatmap + gra)
 ```
 
 ### Ostrzeżenia JVM przy starcie (macOS / Java 21+)
@@ -111,7 +156,7 @@ Te pliki powstają obok repozytorium podczas gry i **nie są commitowane** (patr
 | Plik | Opis |
 |------|------|
 | `stats.db` | Statystyki i historia podejść (SQLite) |
-| `settings.properties` | Klawisze, głośność, dźwięki, odliczanie, opcje UI |
+| `settings.properties` | Klawisze, głośność, dźwięki, odliczanie, czas na reakcję, opcje UI |
 | `songs/*.json` | Beatmapy — **można** commitować, jeśli chcesz się nimi dzielić |
 | `songs/*.{mp3,wav,...}` | Audio użytkownika — **nie commituj** (rozmiar, prawa autorskie) |
 

@@ -12,18 +12,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Trwała konfiguracja użytkownika (warstwa widoku/wejścia — nie dotyka logiki gry).
- *
- * <p>Przechowywana w pliku {@code settings.properties} w katalogu roboczym. Trzyma:</p>
- * <ul>
- *   <li>przypisanie klawiszy do czterech ścieżek (domyślnie D / F / J / K),</li>
- *   <li>długość odliczania przed startem utworu (0 = wyłączone),</li>
- *   <li>przełącznik animowanych komunikatów trafień (PERFECT/GREAT/MISS),</li>
- *   <li>głośność muzyki lobby i utworów w grze,</li>
- *   <li>przełącznik dźwięków trafień podczas rozgrywki.</li>
- * </ul>
- *
- * Singleton — wczytywany leniwie, zapisywany jawnie przez {@link #save()}.
+ * Ustawienia użytkownika — plik {@code settings.properties}, zapis przez {@link #save()}.
+ * Obejmuje: klawisze ścieżek, odliczanie, popupy trafień/combo, głośności (lobby, utwór, UI SFX),
+ * dźwięki trafień, czas na reakcję ({@link #noteLookAheadMs()}), odliczanie po pauzie, pełny ekran przy starcie.
  */
 public final class GameSettings {
 
@@ -42,6 +33,10 @@ public final class GameSettings {
     public static final int VOLUME_MIN = 0;
     public static final int VOLUME_MAX = 100;
 
+    /** Czas pojawiania się nut przed hit-line (ms) — dłuższy = więcej czasu na reakcję. */
+    public static final int[] REACTION_TIME_MS = {2_200, 1_650, 1_200};
+    public static final int REACTION_TIME_DEFAULT = 1;
+
     private static final KeyCode[] DEFAULT_KEYS = {
             KeyCode.D, KeyCode.F, KeyCode.J, KeyCode.K
     };
@@ -57,6 +52,16 @@ public final class GameSettings {
     private int songMusicVolume = 100;
     /** Dźwięki trafień (PERFECT/GREAT/MISS/combo) podczas gry. */
     private boolean gameplayHitSfx = true;
+    /** Głośność krótkich efektów UI (kliknięcia menu, nawigacja). */
+    private int uiSfxVolume = 72;
+    /** Indeks presetu czasu na reakcję ({@link #REACTION_TIME_MS}). */
+    private int reactionTimePreset = REACTION_TIME_DEFAULT;
+    /** Komunikaty combo, mnożnika i zerwania combo nad torami. */
+    private boolean showComboPopups = true;
+    /** Odliczanie po wznowieniu z pauzy (gdy countdown &gt; 0). */
+    private boolean countdownOnResume = true;
+    /** Uruchom grę w trybie pełnoekranowym. */
+    private boolean fullscreenOnStart = false;
 
     private GameSettings() {}
 
@@ -109,12 +114,47 @@ public final class GameSettings {
         return gameplayHitSfx;
     }
 
+    public int uiSfxVolume() {
+        return uiSfxVolume;
+    }
+
+    public int reactionTimePreset() {
+        return reactionTimePreset;
+    }
+
+    /** Czas pojawiania się nut w ms przed hit-line (z presetu czasu na reakcję). */
+    public int noteLookAheadMs() {
+        return REACTION_TIME_MS[reactionTimePreset];
+    }
+
+    /** Etykieta czasu pojawiania się nut, np. {@code "2.2 s"}. */
+    public String reactionTimeLabel() {
+        int ms = REACTION_TIME_MS[reactionTimePreset];
+        return String.format("%.1f s", ms / 1000.0);
+    }
+
+    public boolean showComboPopups() {
+        return showComboPopups;
+    }
+
+    public boolean countdownOnResume() {
+        return countdownOnResume;
+    }
+
+    public boolean fullscreenOnStart() {
+        return fullscreenOnStart;
+    }
+
     public double lobbyMusicVolumeScale() {
         return volumeScale(lobbyMusicVolume);
     }
 
     public double songMusicVolumeScale() {
         return volumeScale(songMusicVolume);
+    }
+
+    public double uiSfxVolumeScale() {
+        return volumeScale(uiSfxVolume);
     }
 
     private static double volumeScale(int percent) {
@@ -160,6 +200,30 @@ public final class GameSettings {
         gameplayHitSfx = enabled;
     }
 
+    public void setUiSfxVolume(int percent) {
+        uiSfxVolume = clampVolume(percent);
+    }
+
+    public void setReactionTimePreset(int preset) {
+        reactionTimePreset = Math.max(0, Math.min(REACTION_TIME_MS.length - 1, preset));
+    }
+
+    public void adjustReactionTimePreset(int delta) {
+        setReactionTimePreset(reactionTimePreset + delta);
+    }
+
+    public void setShowComboPopups(boolean show) {
+        showComboPopups = show;
+    }
+
+    public void setCountdownOnResume(boolean enabled) {
+        countdownOnResume = enabled;
+    }
+
+    public void setFullscreenOnStart(boolean enabled) {
+        fullscreenOnStart = enabled;
+    }
+
     public void adjustLobbyMusicVolume(int delta) {
         setLobbyMusicVolume(lobbyMusicVolume + delta);
     }
@@ -201,6 +265,20 @@ public final class GameSettings {
                 VOLUME_MIN, VOLUME_MAX);
         gameplayHitSfx = Boolean.parseBoolean(
                 p.getProperty("audio.gameplay.sfx", Boolean.toString(gameplayHitSfx)));
+        uiSfxVolume = parseInt(p.getProperty("audio.ui.sfx.volume"), uiSfxVolume,
+                VOLUME_MIN, VOLUME_MAX);
+        String reactionRaw = p.getProperty("gameplay.reaction.time");
+        if (reactionRaw == null) {
+            reactionRaw = p.getProperty("gameplay.note.speed");
+        }
+        reactionTimePreset = parseInt(reactionRaw, reactionTimePreset,
+                0, REACTION_TIME_MS.length - 1);
+        showComboPopups = Boolean.parseBoolean(
+                p.getProperty("popups.combo", Boolean.toString(showComboPopups)));
+        countdownOnResume = Boolean.parseBoolean(
+                p.getProperty("gameplay.countdown.resume", Boolean.toString(countdownOnResume)));
+        fullscreenOnStart = Boolean.parseBoolean(
+                p.getProperty("display.fullscreen.start", Boolean.toString(fullscreenOnStart)));
         dedupeKeys();
     }
 
@@ -215,6 +293,11 @@ public final class GameSettings {
         p.setProperty("audio.lobby.volume", Integer.toString(lobbyMusicVolume));
         p.setProperty("audio.song.volume", Integer.toString(songMusicVolume));
         p.setProperty("audio.gameplay.sfx", Boolean.toString(gameplayHitSfx));
+        p.setProperty("audio.ui.sfx.volume", Integer.toString(uiSfxVolume));
+        p.setProperty("gameplay.reaction.time", Integer.toString(reactionTimePreset));
+        p.setProperty("popups.combo", Boolean.toString(showComboPopups));
+        p.setProperty("gameplay.countdown.resume", Boolean.toString(countdownOnResume));
+        p.setProperty("display.fullscreen.start", Boolean.toString(fullscreenOnStart));
         try (OutputStream out = Files.newOutputStream(storageFile)) {
             p.store(out, "OpenGuitar — ustawienia użytkownika");
         } catch (Exception ex) {
