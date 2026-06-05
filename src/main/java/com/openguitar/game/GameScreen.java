@@ -755,7 +755,7 @@ public final class GameScreen {
         if (!paused) return;
         GameLog.event(LOG, "game", "resumeGame() — czas=" + (int) pauseMediaTimeMs + "ms");
         paused = false;
-        if (countdownTotalNanos > 0) {
+        if (countdownTotalNanos > 0 && countdownOnResume) {
             // Wznowienie przez odliczanie — gracz ma czas złapać rytm.
             beginCountdown();
         } else {
@@ -848,7 +848,7 @@ public final class GameScreen {
         SoundManager.get().playGameplay(sfx);
 
         if (judgment == HitJudgment.MISS) {
-            if (prevCombo >= 5) {
+            if (showComboPopups && prevCombo >= 5) {
                 popups.add(FloatingPopup.comboBreak(popupCenterX(), popupCenterY()));
             }
             return;
@@ -856,12 +856,14 @@ public final class GameScreen {
 
         int combo = score.combo();
         int mult = score.multiplier();
-        if (mult > prevMult) {
-            popups.add(FloatingPopup.multiplier(mult, popupCenterX(), popupCenterY()));
-        }
-        if (isComboMilestone(combo, prevCombo)) {
-            popups.add(FloatingPopup.combo(combo, popupCenterX(), popupCenterY() - 18));
-            SoundManager.get().playGameplay(SoundManager.Sfx.COMBO);
+        if (showComboPopups) {
+            if (mult > prevMult) {
+                popups.add(FloatingPopup.multiplier(mult, popupCenterX(), popupCenterY()));
+            }
+            if (ComboMilestones.popupAt(combo, prevCombo)) {
+                popups.add(FloatingPopup.combo(combo, popupCenterX(), popupCenterY() - 18));
+                SoundManager.get().playGameplay(SoundManager.Sfx.COMBO);
+            }
         }
     }
 
