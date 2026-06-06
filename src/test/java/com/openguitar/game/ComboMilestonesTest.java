@@ -24,6 +24,13 @@ class ComboMilestonesTest {
     }
 
     @Test
+    void shouldRejectLowOrRegressedCombo() {
+        assertFalse(ComboMilestones.popupAt(0, 0));
+        assertFalse(ComboMilestones.popupAt(5, 4));
+        assertFalse(ComboMilestones.popupAt(15, 20));
+    }
+
+    @Test
     void shouldSkipNonMilestoneValues() {
         assertFalse(ComboMilestones.popupAt(11, 10));
         assertFalse(ComboMilestones.popupAt(24, 23));
