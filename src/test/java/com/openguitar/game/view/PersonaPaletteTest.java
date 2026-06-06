@@ -4,6 +4,7 @@ import javafx.scene.paint.Color;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 class PersonaPaletteTest {
@@ -25,6 +26,20 @@ class PersonaPaletteTest {
         assertSame(PersonaPalette.TEAL, PersonaPalette.multiplierColor(2));
         assertSame(PersonaPalette.AQUA_BRIGHT, PersonaPalette.multiplierColor(3));
         assertSame(PersonaPalette.COMBO_HOT, PersonaPalette.multiplierColor(4));
+    }
+
+    @Test
+    void laneColorsShouldWrapAndStayDistinct() {
+        assertEquals(PersonaPalette.lane(0), PersonaPalette.lane(4));
+        assertEquals(PersonaPalette.lane(1), PersonaPalette.lane(-3));
+        for (int i = 0; i < 4; i++) {
+            for (int j = i + 1; j < 4; j++) {
+                int laneA = i;
+                int laneB = j;
+                assertFalse(PersonaPalette.lane(laneA).equals(PersonaPalette.lane(laneB)),
+                        () -> "lanes " + laneA + " and " + laneB + " should differ");
+            }
+        }
     }
 
     @Test
