@@ -93,6 +93,7 @@ class GameSettingsTest {
         s.setShowComboPopups(false);
         s.setCountdownOnResume(false);
         s.setFullscreenOnStart(true);
+        s.setLocaleTag("en");
         s.setLaneKey(2, KeyCode.SPACE);
         s.save();
 
@@ -110,7 +111,75 @@ class GameSettingsTest {
         assertFalse(loaded.showComboPopups());
         assertFalse(loaded.countdownOnResume());
         assertTrue(loaded.fullscreenOnStart());
+        assertEquals("en", loaded.localeTag());
         assertEquals(KeyCode.SPACE, loaded.laneKey(2));
+    }
+
+    @Test
+    void normalizeLocaleTagShouldTrimAndRejectUnknown() {
+        assertEquals("pl", GameSettings.normalizeLocaleTag(null));
+        assertEquals("pl", GameSettings.normalizeLocaleTag("  "));
+        assertEquals("pl", GameSettings.normalizeLocaleTag("invalid"));
+        assertEquals("en", GameSettings.normalizeLocaleTag(" EN "));
+        assertEquals("it", GameSettings.normalizeLocaleTag("it"));
+    }
+
+    @Test
+    void setLocaleTagShouldSwitchActiveI18nBundle() {
+        GameSettings s = GameSettings.get();
+        s.setLocaleTag("de");
+        assertEquals("SPIELEN", I18n.get("title.play"));
+        s.setLocaleTag("it");
+        assertEquals("GIOCA", I18n.get("title.play"));
+        assertEquals("Italiano", s.localeLabel());
+    }
+
+    @Test
+    void cycleLocaleBackwardShouldWrap() {
+        GameSettings s = GameSettings.get();
+        s.setLocaleTag("en");
+        s.cycleLocale(-1);
+        assertEquals("pl", s.localeTag());
+    }
+
+    @Test
+    void shouldLoadLocaleFromSettingsFile() throws Exception {
+        Path props = tempDir.resolve("settings.properties");
+        Files.writeString(props, "display.locale=fr\n");
+        GameSettings.resetForTests(props);
+
+        GameSettings s = GameSettings.get();
+        assertEquals("fr", s.localeTag());
+        assertEquals("JOUER", I18n.get("title.play"));
+    }
+
+    @Test
+    void invalidLocaleInFileShouldDefaultToPolish() throws Exception {
+        Path props = tempDir.resolve("settings.properties");
+        Files.writeString(props, "display.locale=zz\n");
+        GameSettings.resetForTests(props);
+
+        assertEquals("pl", GameSettings.get().localeTag());
+    }
+
+    @Test
+    void localeShouldCycleBetweenSupportedTags() {
+        GameSettings s = GameSettings.get();
+        assertEquals(6, GameSettings.LOCALE_TAGS.length);
+        s.setLocaleTag("pl");
+        s.cycleLocale(1);
+        assertEquals("en", s.localeTag());
+        s.cycleLocale(1);
+        assertEquals("de", s.localeTag());
+        s.cycleLocale(1);
+        assertEquals("es", s.localeTag());
+        s.cycleLocale(1);
+        assertEquals("fr", s.localeTag());
+        s.cycleLocale(1);
+        assertEquals("it", s.localeTag());
+        s.cycleLocale(1);
+        assertEquals("pl", s.localeTag());
+        assertEquals("Polski", s.localeLabel());
     }
 
     @Test
@@ -166,6 +235,38 @@ class GameSettingsTest {
         assertEquals(before, s.laneKey(0));
         s.setLaneKey(99, KeyCode.B);
         assertEquals(before, s.laneKey(0));
+    }
+
+    @Test
+    void freshSettingsShouldDefaultToPolishLocale() {
+        Path missing = tempDir.resolve("no-settings-yet.properties");
+        GameSettings.resetForTests(missing);
+
+        GameSettings s = GameSettings.get();
+        assertEquals("pl", s.localeTag());
+        assertEquals("GRAJ", I18n.get("title.play"));
+    }
+
+    @Test
+    void noteLookAheadMsShouldMapPresetsToMilliseconds() {
+        GameSettings s = GameSettings.get();
+        s.setReactionTimePreset(0);
+        assertEquals(2_200, s.noteLookAheadMs());
+        s.setReactionTimePreset(1);
+        assertEquals(1_650, s.noteLookAheadMs());
+        s.setReactionTimePreset(2);
+        assertEquals(1_200, s.noteLookAheadMs());
+    }
+
+    @Test
+    void localeLabelShouldResolveNativeNameForActiveLocale() {
+        GameSettings s = GameSettings.get();
+        s.setLocaleTag("pl");
+        assertEquals("Polski", s.localeLabel());
+        s.setLocaleTag("de");
+        assertEquals("Deutsch", s.localeLabel());
+        s.setLocaleTag("it");
+        assertEquals("Italiano", s.localeLabel());
     }
 
     @Test
