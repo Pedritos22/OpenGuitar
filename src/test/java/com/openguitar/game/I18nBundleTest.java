@@ -94,13 +94,15 @@ class I18nBundleTest {
         }
     }
 
-    private static Properties loadBundle(String tag) throws Exception {
-        Properties p = new Properties();
-        String path = "/i18n/messages_" + tag + ".properties";
-        try (InputStream in = I18nBundleTest.class.getResourceAsStream(path);
-             InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
+private static Properties loadBundle(String tag) throws Exception {
+    Properties p = new Properties();
+    String path = "/i18n/messages_" + tag + ".properties";
+    try (InputStream in = I18nBundleTest.class.getResourceAsStream(path)) {
+        assertNotNull(in, "missing resource: " + path);
+        try (InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
             p.load(reader);
         }
-        return p;
     }
+    return p;
+}
 }
