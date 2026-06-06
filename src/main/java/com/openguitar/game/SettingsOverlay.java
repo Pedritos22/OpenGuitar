@@ -40,9 +40,16 @@ final class SettingsOverlay {
     private Button countdownResumeToggle;
     private Button fullscreenToggle;
     private Button hitSfxToggle;
+    private Label languageValue;
+
+    private Runnable onLocaleChanged;
 
     SettingsOverlay(double width) {
         this.width = width;
+    }
+
+    void setOnLocaleChanged(Runnable callback) {
+        onLocaleChanged = callback;
     }
 
     boolean isOpen() {
@@ -94,16 +101,16 @@ final class SettingsOverlay {
     // ── budowa widoku ──────────────────────────────────────────────────────
 
     private StackPane build() {
-        Label heading = new Label("USTAWIENIA");
+        Label heading = new Label(I18n.get("settings.title"));
         heading.setFont(PersonaFonts.display(26));
         heading.setTextFill(Color.web(PersonaMenuTheme.ACCENT));
         PersonaMenuFx.slant(heading, -0.14);
 
-        Label sub = new Label("Sterowanie · dźwięk · rozgrywka");
+        Label sub = new Label(I18n.get("settings.subtitle"));
         sub.setFont(PersonaFonts.body(11));
         sub.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
 
-        Label hint = new Label("Kliknij klawisz · ESC — zamknij");
+        Label hint = new Label(I18n.get("settings.hint"));
         hint.setFont(PersonaFonts.body(10));
         hint.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
         hint.setPadding(new Insets(4, 0, 0, 1));
@@ -112,19 +119,21 @@ final class SettingsOverlay {
         head.setAlignment(Pos.CENTER_LEFT);
 
         VBox body = new VBox(6,
-                sectionBlock("STEROWANIE", keyBindingsGrid()),
-                sectionBlock("DŹWIĘK",
+                sectionBlock(I18n.get("settings.section.controls"), keyBindingsGrid()),
+                sectionBlock(I18n.get("settings.section.audio"),
                         lobbyVolumeRow(),
                         songVolumeRow(),
                         uiSfxVolumeRow(),
                         hitSfxRow()),
-                sectionBlock("ROZGRYWKA",
+                sectionBlock(I18n.get("settings.section.gameplay"),
                         reactionTimeRow(),
                         countdownRow(),
                         countdownResumeRow(),
                         popupsRow(),
                         comboPopupsRow()),
-                sectionBlock("WYŚWIETLANIE", fullscreenRow()));
+                sectionBlock(I18n.get("settings.section.display"),
+                        languageRow(),
+                        fullscreenRow()));
         body.setFillWidth(true);
 
         ScrollPane scroll = new ScrollPane(body);
@@ -201,7 +210,7 @@ final class SettingsOverlay {
         dot.setMaxSize(8, 8);
         dot.setStyle("-fx-background-color: " + toHex(com.openguitar.game.view.PersonaPalette.lane(lane)) + ";");
 
-        Label name = new Label("Ścieżka " + (lane + 1));
+        Label name = new Label(I18n.format("settings.lane", lane + 1));
         name.setFont(PersonaMenuTheme.labelFont(11));
         name.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
 
@@ -281,7 +290,7 @@ final class SettingsOverlay {
 
     private VBox lobbyVolumeRow() {
         GameSettings s = GameSettings.get();
-        return volumeSliderRow("Głośność muzyki lobby", s.lobbyMusicVolume(), v -> {
+        return volumeSliderRow(I18n.get("settings.volume.lobby"), s.lobbyMusicVolume(), v -> {
             s.setLobbyMusicVolume(v);
             SoundManager.get().refreshLobbyVolume();
         });
@@ -289,19 +298,19 @@ final class SettingsOverlay {
 
     private VBox songVolumeRow() {
         GameSettings s = GameSettings.get();
-        return volumeSliderRow("Głośność piosenek", s.songMusicVolume(), s::setSongMusicVolume);
+        return volumeSliderRow(I18n.get("settings.volume.songs"), s.songMusicVolume(), s::setSongMusicVolume);
     }
 
     private VBox uiSfxVolumeRow() {
         GameSettings s = GameSettings.get();
-        return volumeSliderRow("Głośność efektów UI", s.uiSfxVolume(), v -> {
+        return volumeSliderRow(I18n.get("settings.volume.ui"), s.uiSfxVolume(), v -> {
             s.setUiSfxVolume(v);
             SoundManager.get().play(SoundManager.Sfx.NAV);
         });
     }
 
     private HBox hitSfxRow() {
-        Label name = new Label("Dźwięki trafień");
+        Label name = new Label(I18n.get("settings.hit_sfx"));
         name.setFont(PersonaMenuTheme.labelFont(11));
         name.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
         HBox.setHgrow(name, Priority.ALWAYS);
@@ -329,11 +338,11 @@ final class SettingsOverlay {
     }
 
     private void updateHitSfxToggle() {
-        hitSfxToggle.setText(GameSettings.get().gameplayHitSfx() ? "Wł." : "Wył.");
+        setToggleText(hitSfxToggle, GameSettings.get().gameplayHitSfx());
     }
 
     private HBox countdownRow() {
-        Label name = new Label("Odliczanie");
+        Label name = new Label(I18n.get("settings.countdown"));
         name.setFont(PersonaMenuTheme.labelFont(11));
         name.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
         HBox.setHgrow(name, Priority.ALWAYS);
@@ -370,11 +379,11 @@ final class SettingsOverlay {
 
     private void updateCountdownValue() {
         int sec = GameSettings.get().countdownSeconds();
-        countdownValue.setText(sec <= 0 ? "Wył." : sec + " s");
+        countdownValue.setText(sec <= 0 ? I18n.get("settings.disabled") : I18n.format("settings.seconds", sec));
     }
 
     private HBox reactionTimeRow() {
-        Label name = new Label("Czas na reakcję");
+        Label name = new Label(I18n.get("settings.reaction"));
         name.setFont(PersonaMenuTheme.labelFont(11));
         name.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
         HBox.setHgrow(name, Priority.ALWAYS);
@@ -414,7 +423,7 @@ final class SettingsOverlay {
     }
 
     private HBox countdownResumeRow() {
-        HBox row = toggleRow("Odliczanie po pauzie", b -> countdownResumeToggle = b, () -> {
+        HBox row = toggleRow(I18n.get("settings.countdown.resume"), b -> countdownResumeToggle = b, () -> {
             GameSettings s = GameSettings.get();
             s.setCountdownOnResume(!s.countdownOnResume());
             updateCountdownResumeToggle();
@@ -428,7 +437,7 @@ final class SettingsOverlay {
     }
 
     private HBox popupsRow() {
-        Label name = new Label("Komunikaty trafień");
+        Label name = new Label(I18n.get("settings.popups.hits"));
         name.setFont(PersonaMenuTheme.labelFont(11));
         name.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
         HBox.setHgrow(name, Priority.ALWAYS);
@@ -457,7 +466,7 @@ final class SettingsOverlay {
     }
 
     private HBox comboPopupsRow() {
-        HBox row = toggleRow("Komunikaty combo", b -> comboPopupsToggle = b, () -> {
+        HBox row = toggleRow(I18n.get("settings.popups.combo"), b -> comboPopupsToggle = b, () -> {
             GameSettings s = GameSettings.get();
             s.setShowComboPopups(!s.showComboPopups());
             updateComboPopupsToggle();
@@ -471,7 +480,7 @@ final class SettingsOverlay {
     }
 
     private HBox fullscreenRow() {
-        HBox row = toggleRow("Pełny ekran przy starcie", b -> fullscreenToggle = b, () -> {
+        HBox row = toggleRow(I18n.get("settings.fullscreen.start"), b -> fullscreenToggle = b, () -> {
             GameSettings s = GameSettings.get();
             s.setFullscreenOnStart(!s.fullscreenOnStart());
             updateFullscreenToggle();
@@ -508,8 +517,63 @@ final class SettingsOverlay {
         return row;
     }
 
+    private HBox languageRow() {
+        Label name = new Label(I18n.get("settings.language"));
+        name.setFont(PersonaMenuTheme.labelFont(11));
+        name.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
+        HBox.setHgrow(name, Priority.ALWAYS);
+        name.setMinWidth(0);
+        name.setMaxWidth(Double.MAX_VALUE);
+
+        languageValue = new Label();
+        languageValue.setFont(PersonaMenuTheme.labelFont(11));
+        languageValue.setTextFill(Color.web(PersonaMenuTheme.ACCENT_GLOW));
+        languageValue.setMinWidth(84);
+        languageValue.setAlignment(Pos.CENTER);
+        updateLanguageValue();
+
+        Button minus = stepper("\u2212");
+        minus.setOnAction(e -> changeLanguage(-1));
+        Button plus = stepper("+");
+        plus.setOnAction(e -> changeLanguage(1));
+
+        HBox controls = new HBox(4, minus, languageValue, plus);
+        controls.setAlignment(Pos.CENTER_RIGHT);
+
+        HBox row = new HBox(8, name, controls);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setStyle(PersonaMenuTheme.settingRowCompact());
+        return row;
+    }
+
+    private void changeLanguage(int delta) {
+        GameSettings.get().cycleLocale(delta);
+        rebuildOverlay();
+        SoundManager.get().play(SoundManager.Sfx.NAV);
+    }
+
+    private void updateLanguageValue() {
+        if (languageValue != null) {
+            languageValue.setText(GameSettings.get().localeLabel());
+        }
+    }
+
+    /** Przebudowuje panel po zmianie języka (etykiety w nowym locale). */
+    private void rebuildOverlay() {
+        if (host == null || node == null) {
+            return;
+        }
+        host.getChildren().remove(node);
+        rebindingLane = -1;
+        node = build();
+        host.getChildren().add(node);
+        if (onLocaleChanged != null) {
+            onLocaleChanged.run();
+        }
+    }
+
     private static void setToggleText(Button toggle, boolean on) {
-        toggle.setText(on ? "Wł." : "Wył.");
+        toggle.setText(on ? I18n.get("settings.on") : I18n.get("settings.off"));
     }
 
     private static Button stepper(String text) {
