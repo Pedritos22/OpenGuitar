@@ -3,192 +3,190 @@
 [![Java](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Maven](https://img.shields.io/badge/Maven-3.9+-C71A36?logo=apachemaven&logoColor=white)](https://maven.apache.org/)
 [![JavaFX](https://img.shields.io/badge/JavaFX-21-FF6A00?logo=java&logoColor=white)](https://openjfx.io/)
-[![Tests](https://img.shields.io/badge/Tests-74-25A162?logo=junit5&logoColor=white)](DOCUMENTATION.md#12-testy)
+[![Tests](https://img.shields.io/badge/Tests-100-25A162?logo=junit5&logoColor=white)](DOCUMENTATION.md#12-tests)
 [![GitHub](https://img.shields.io/badge/GitHub-OpenGuitar-181717?logo=github)](https://github.com/Pedritos22/OpenGuitar)
 
-Klon **Guitar Hero** na desktop — Java 21, Maven, JavaFX. Projekt akademicki składający się z dwóch modułów:
+A desktop rhythm game in the style of Guitar Hero. Drop your music into a folder, hit the notes in time, and chase high scores and S-ranks.
 
-| Moduł | Pakiet | Odpowiedzialność |
-|-------|--------|------------------|
-| **Beatmapa** | `com.openguitar.beatmap` | Analiza audio (DSP), generowanie nut, zapis JSON |
-| **Gra** | `com.openguitar.game` | Menu, rozgrywka, hit detection, statystyki, dźwięk, UI |
+Built with **Java 21**, **Maven**, and **JavaFX**. Beatmaps are generated automatically from your audio files and saved as JSON for instant replay.
 
-Interfejs inspirowany estetyką **Persona 3 Reload** (P3R): ukośne panele, neonowy błękit, fonty Bebas Neue + Rajdhani, kryształowe nuty na perspektywicznej autostradzie.
-
-Szczegóły techniczne (architektura, synchronizacja audio, format plików, testy) → **[DOCUMENTATION.md](DOCUMENTATION.md)**.
+For architecture, audio sync, file formats, and test details, see **[DOCUMENTATION.md](DOCUMENTATION.md)**.
 
 ---
 
-## Wymagania
+## Requirements
 
-- **JDK 21** (JavaFX jest w zależnościach Maven — osobna instalacja JavaFX nie jest potrzebna)
+- **JDK 21** — JavaFX is pulled in by Maven; no separate JavaFX install needed
 - **Maven 3.9+**
 
 ---
 
-## Szybki start
+## Quick start
 
-1. Wrzuć pliki audio do `songs/`:
+1. Add audio files to `songs/`:
 
    ```
-   songs/moj-utwor.mp3
-   songs/inny.wav
+   songs/my-track.mp3
+   songs/another-track.wav
    ```
 
-2. Uruchom grę:
+2. Launch the game:
 
    ```bash
    ./play.sh
    ```
 
-3. Na ekranie tytułowym wybierz **GRAJ**, potem utwór z listy i kliknij **Graj** (lub **Generuj**, jeśli brak beatmapy `.json`).
+3. On the title screen, choose **PLAY**, pick a song from the list, then click **Play** (or **Generate** if no `.json` beatmap exists yet).
 
-### Przepływ ekranów
+### Screen flow
 
 ```
-Panel startowy (GRAJ / USTAWIENIA / WYJŚCIE)
-    │ GRAJ
+Title screen (PLAY / SETTINGS / QUIT)
+    │ PLAY
     ▼
-Lista utworów (+ statystyki, historia, ustawienia)
-    │ Graj
+Song list (stats, history, settings)
+    │ Play
     ▼
-Rozgrywka → ekran wyników → lista utworów
-    │ Powrót / ESC (z listy)
+Gameplay → results screen → song list
+    │ Back / ESC (from song list)
     ▼
-Panel startowy
+Title screen
 ```
 
-Zamykanie aplikacji (**WYJŚCIE**) jest tylko z panelu startowego.
+Quit the application (**QUIT**) from the title screen only.
 
-### Sterowanie w grze
+### In-game controls
 
-| Akcja | Domyślnie |
-|-------|-----------|
-| Ścieżki 1–4 | **D** **F** **J** **K** (konfigurowalne w ustawieniach) |
-| Pauza | **ESC** → menu pauzy (Wznów / Wyjdź do menu) |
-| Pełny ekran | **F11** (zachowywany przy przejściu menu ↔ gra) |
+| Action | Default |
+|--------|---------|
+| Lanes 1–4 | **D** **F** **J** **K** (configurable in settings) |
+| Pause | **ESC** → pause menu (Resume / Quit to menu) |
+| Fullscreen | **F11** (preserved when switching between menu and gameplay) |
 
-Przed startem utworu pojawia się **odliczanie 3→2→1→GO!** — długość ustawiasz w ustawieniach (0 = wyłączone). Po wznowieniu z pauzy odliczanie można włączyć osobnym przełącznikiem.
+Before a song starts, a **3 → 2 → 1 → GO!** countdown runs. Set the length in settings (0 disables it). You can also enable a countdown when resuming from pause.
 
-Po zakończeniu utworu wyświetla się **animowany ekran wyników** (PERFECT / GREAT / MISS, combo, celność, ranga S–E). **ENTER** wraca do listy utworów.
+When a song ends, an **animated results screen** shows PERFECT / GREAT / MISS counts, combo, accuracy, and an S–E rank. Press **ENTER** to return to the song list.
 
-### Panel startowy i lista utworów
+### Title screen and song list
 
-**Panel startowy**
+**Title screen**
 
-- **GRAJ** — przejście do listy utworów
-- **USTAWIENIA** — ten sam panel co na liście (klawisze, dźwięk, rozgrywka, wyświetlanie)
-- **WYJŚCIE** — zamknięcie aplikacji
-- Nawigacja: strzałki, Enter, mysz (hover + klik)
+- **PLAY** — open the song list
+- **SETTINGS** — same panel as on the song list (controls, audio, gameplay, display)
+- **QUIT** — exit the application
+- Navigation: arrow keys, Enter, mouse (hover + click)
 
-**Lista utworów**
+**Song list**
 
-- Kliknij wiersz, aby zaznaczyć; strzałki + Enter też działają
-- **Statystyki** — panel u góry (podejścia, rekord, combo wybranego utworu)
-- **Ranga** — litera S–E obok tytułu (najlepszy wynik)
-- **Historia** — ostatnie podejścia (przycisk lub **H**)
-- **⚙ Ustawienia** — patrz sekcja poniżej
-- **Powrót** / **ESC** — wraca do panelu startowego
-- **Odśwież** — ponowny skan folderu `songs/`
+- Click a row to select; arrow keys + Enter also work
+- **Stats** — panel at the top (attempts, best score, best combo for the selected song)
+- **Rank** — S–E letter next to the title (best result)
+- **History** — recent attempts (button or **H**)
+- **⚙ Settings** — see section below
+- **Back** / **ESC** — return to the title screen
+- **Refresh** — rescan the `songs/` folder
 
-### Ustawienia (⚙)
+### Settings (⚙)
 
-Panel jest wspólny dla panelu startowego i listy utworów. Sekcje:
+The settings panel is shared on the title screen and song list.
 
-| Sekcja | Opcje |
-|--------|--------|
-| **STEROWANIE** | Przypisanie klawiszy do 4 ścieżek |
-| **DŹWIĘK** | Głośność lobby, głośność utworów w grze, głośność efektów UI menu, dźwięki trafień w rozgrywce |
-| **ROZGRYWKA** | Czas na reakcję (2,2 s / 1,7 s / 1,2 s — jak wcześnie nuty wjeżdżają na tor), odliczanie przed startem, odliczanie po wznowieniu z pauzy, komunikaty trafień (PERFECT/GREAT/MISS), komunikaty combo i mnożnika |
-| **WYŚWIETLANIE** | Pełny ekran przy starcie aplikacji |
+| Section | Options |
+|---------|---------|
+| **CONTROLS** | Key bindings for 4 lanes |
+| **AUDIO** | Lobby music volume, in-game song volume, menu UI SFX volume, hit sounds during gameplay |
+| **GAMEPLAY** | Reaction time (2.2 s / 1.7 s / 1.2 s — how early notes appear), pre-start countdown, countdown on resume, hit popups (PERFECT/GREAT/MISS), combo and multiplier popups |
+| **DISPLAY** | Fullscreen on launch, UI language |
 
-Wartości zapisują się w `settings.properties` (m.in. `gameplay.reaction.time`, `audio.ui.sfx.volume`, `popups.combo`, `gameplay.countdown.resume`, `display.fullscreen.start`).
+Supported languages: **Polish**, **English**, **German**, **Spanish**, **French**, and **Italian**. Rhythm-game terms (PERFECT, SCORE, COMBO, GO!) stay in English across all locales.
 
-### Dźwięk
+Settings are saved to `settings.properties` (e.g. `gameplay.reaction.time`, `audio.ui.sfx.volume`, `popups.combo`, `gameplay.countdown.resume`, `display.fullscreen.start`, `display.locale`).
 
-| Kontekst | Co słychać |
-|----------|------------|
-| **Panel startowy** | `song_lobby.mp3` |
-| **Lista utworów** | `song_ending.mp3` |
-| **Gra** | Odtwarzany utwór z folderu `songs/` (głośność w ustawieniach) |
-| **Wyniki** | `song_ending.mp3` w pętli |
-| **UI** | Szklane kliki, nawigacja, odliczanie, pauza (głośność efektów UI w ustawieniach) |
-| **Trafienia** | Dźwięki PERFECT/GREAT/MISS/combo (można wyłączyć w ustawieniach) |
+### Audio
 
-Przejścia między panelem startowym a listą utworów robią krótki crossfade między utworami lobby.
+| Context | What plays |
+|---------|------------|
+| **Title screen** | `song_lobby.mp3` |
+| **Song list** | `song_ending.mp3` |
+| **Gameplay** | Selected track from `songs/` (volume in settings) |
+| **Results** | `song_ending.mp3` (looped) |
+| **UI** | Menu clicks, navigation, countdown, pause (UI SFX volume in settings) |
+| **Hits** | PERFECT / GREAT / MISS / combo sounds (can be disabled in settings) |
 
-### Combo i kolory
+Transitions between the title screen and song list use a short crossfade between lobby tracks.
 
-Licznik combo i mnożnik w HUD oraz wyskakujące komunikaty zmieniają kolor wraz z progiem (np. turkus od 10, niebieski od 20, jaśniejszy cyjan od 30, pomarańcz od 50, złoto od 100). Popup combo pojawia się co 10 trafień oraz przy 25, 50 i 100.
+### Combo and colors
+
+The combo counter and multiplier in the HUD, plus on-screen popups, shift color as you climb thresholds (e.g. teal from 10, blue from 20, bright cyan from 30, magenta from 50, gold from 100). Combo popups appear every 10 hits and at 25, 50, and 100.
 
 ---
 
-## Tryby uruchomienia
+## Launch options
 
 ```bash
-./play.sh                              # panel startowy (domyślne)
-./play.sh songs/utwor.mp3              # od razu gra (auto-generacja beatmapy)
-./play.sh songs/utwor.json             # gra z gotową mapą
-./play.sh songs/utwor.mp3 --regen      # wymuś regenerację beatmapy
-./play.sh --list                       # lista plików audio w songs/
+./play.sh                              # title screen (default)
+./play.sh songs/track.mp3              # jump straight into gameplay (auto-generate beatmap)
+./play.sh songs/track.json             # play with an existing beatmap
+./play.sh songs/track.mp3 --regen      # force beatmap regeneration
+./play.sh --list                       # list audio files in songs/
 ```
 
-**Logi diagnostyczne** — `./play.sh` ładuje `src/main/resources/logging.properties`. W konsoli widać zdarzenia aplikacji, audio lobby i rozgrywki (prefiks `[komponent][FX|BG]`, np. `[game][FX] start()`). Szczegóły w [DOCUMENTATION.md §14](DOCUMENTATION.md#14-logi-diagnostyczne).
+**Diagnostic logs** — `./play.sh` loads `src/main/resources/logging.properties`. The console shows app, lobby audio, and gameplay events (prefix `[component][FX|BG]`, e.g. `[game][FX] start()`). See [DOCUMENTATION.md §14](DOCUMENTATION.md#14-diagnostic-logging).
 
-Równoważne komendy Maven:
+Equivalent Maven commands:
 
 ```bash
 mvn javafx:run
-mvn javafx:run -Djavafx.args="songs/utwor.json"
-mvn test                               # testy jednostkowe (beatmap + gra)
+mvn javafx:run -Djavafx.args="songs/track.json"
+mvn test                               # unit tests (beatmap + game)
 ```
 
-### Ostrzeżenia JVM przy starcie (macOS / Java 21+)
+### JVM warnings on startup (macOS / Java 21+)
 
-Przy `./play.sh` lub `mvn javafx:run` mogą pojawić się żółte linie `WARNING: A restricted method in java.lang.System has been called` — to **nie błąd gry**, tylko informacja Javy o ładowaniu bibliotek natywnych (JavaFX, opcjonalnie SQLite przy statystykach). Gra powinna działać normalnie. Wyjaśnienie → [DOCUMENTATION.md §14](DOCUMENTATION.md#14-logi-diagnostyczne).
-
----
-
-## Pliki generowane w runtime
-
-Te pliki powstają obok repozytorium podczas gry i **nie są commitowane** (patrz `.gitignore`):
-
-| Plik | Opis |
-|------|------|
-| `stats.db` | Statystyki i historia podejść (SQLite) |
-| `settings.properties` | Klawisze, głośność, dźwięki, odliczanie, czas na reakcję, opcje UI |
-| `songs/*.json` | Beatmapy — **można** commitować, jeśli chcesz się nimi dzielić |
-| `songs/*.{mp3,wav,...}` | Audio użytkownika — **nie commituj** (rozmiar, prawa autorskie) |
-
-> **Uwaga:** starszy format `stats.json` nie jest już używany — statystyki migrowały do `stats.db`. Jeśli masz lokalny `stats.json`, możesz go bezpiecznie usunąć.
+When running `./play.sh` or `mvn javafx:run`, you may see yellow lines like `WARNING: A restricted method in java.lang.System has been called`. This is **not a game error** — it is Java reporting native library loading (JavaFX, and optionally SQLite for stats). The game should run normally. Details in [DOCUMENTATION.md §14](DOCUMENTATION.md#14-diagnostic-logging).
 
 ---
 
-## Struktura repozytorium (skrót)
+## Runtime files
+
+These files are created next to the repository while you play and are **not committed** (see `.gitignore`):
+
+| File | Description |
+|------|-------------|
+| `stats.db` | Stats and attempt history (SQLite) |
+| `settings.properties` | Keys, volume, sounds, countdown, reaction time, UI options |
+| `songs/*.json` | Beatmaps — **can** be committed if you want to share them |
+| `songs/*.{mp3,wav,...}` | Your audio — **do not commit** (size, copyright) |
+
+> **Note:** The older `stats.json` format is no longer used — stats moved to `stats.db`. If you still have a local `stats.json`, you can delete it safely.
+
+---
+
+## Repository layout
 
 ```
 OpenGuitar/
-├── play.sh                 # wrapper uruchomieniowy
-├── songs/                  # audio + beatmapy JSON
+├── play.sh                 # launch wrapper
+├── songs/                  # audio + JSON beatmaps
 ├── src/main/java/
-│   ├── com/openguitar/beatmap/   # silnik analizy audio
-│   └── com/openguitar/game/     # aplikacja JavaFX
+│   ├── com/openguitar/beatmap/   # audio analysis & beatmap generation
+│   └── com/openguitar/game/      # JavaFX application
 ├── src/main/resources/
 │   ├── fonts/                    # Bebas Neue, Rajdhani (OFL)
-│   ├── images/                   # logo menu
-│   ├── logging.properties        # konfiguracja logów konsoli (INFO / FINE)
-│   └── sound/                    # muzyka lobby + SFX (Kenney CC0)
-├── src/test/java/                # testy JUnit 5 (beatmap + game)
-├── README.md                     # ten plik
-└── DOCUMENTATION.md              # dokumentacja techniczna
+│   ├── i18n/                     # UI translations (pl, en, de, es, fr, it)
+│   ├── images/                   # menu logo
+│   ├── logging.properties        # console log config (INFO / FINE)
+│   └── sound/                    # lobby music + SFX (Kenney CC0)
+├── src/test/java/                # JUnit 5 tests (beatmap + game)
+├── README.md                     # this file
+└── DOCUMENTATION.md              # technical documentation
 ```
 
 ---
 
-## Licencje zasobów
+## Asset licenses
 
-| Zasób | Licencja |
-|-------|----------|
-| Fonty (`src/main/resources/fonts/`) | **SIL Open Font License** — szczegóły w `OFL-*.txt` |
-| Efekty UI (`src/main/resources/sound/sfx_*.wav`) | **CC0** — pakiet [Kenney UI Audio](https://kenney.nl/assets/ui-audio); patrz `KENNEY_UI_AUDIO_LICENSE.txt` |
-| Muzyka lobby (`song_lobby.mp3`, `song_ending.mp3`) | Pliki projektu w repozytorium |
+| Asset | License |
+|-------|---------|
+| Fonts (`src/main/resources/fonts/`) | **SIL Open Font License** — see `OFL-*.txt` |
+| UI SFX (`src/main/resources/sound/sfx_*.wav`) | **CC0** — [Kenney UI Audio](https://kenney.nl/assets/ui-audio); see `KENNEY_UI_AUDIO_LICENSE.txt` |
+| Lobby music (`song_lobby.mp3`, `song_ending.mp3`) | Project files in the repository |
