@@ -70,7 +70,7 @@ final class FloatingPopup {
         };
         return new FloatingPopup(
                 "x" + mult,
-                "MULTIPLIER",
+                I18n.get("game.popup.multiplier"),
                 centerX,
                 centerY,
                 color,
@@ -85,7 +85,7 @@ final class FloatingPopup {
         Color color = PersonaPalette.comboColor(combo);
         double size = combo >= 100 ? 58 : combo >= 50 ? 52 : combo >= 25 ? 46 : 40;
         return new FloatingPopup(
-                combo + " COMBO",
+                I18n.format("game.popup.combo", combo),
                 null,
                 centerX,
                 centerY - 28,
@@ -99,7 +99,7 @@ final class FloatingPopup {
     static FloatingPopup comboBreak(double centerX, double centerY) {
         long now = System.nanoTime();
         return new FloatingPopup(
-                "COMBO BREAK",
+                I18n.get("game.popup.combo_break"),
                 null,
                 centerX,
                 centerY,
