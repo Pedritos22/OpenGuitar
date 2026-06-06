@@ -10,6 +10,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.effect.DropShadow;
@@ -451,11 +452,19 @@ public final class MenuScreen {
 
     /** Przycisk z ikoną zębatki (⚙) otwierający ustawienia. */
     private static Button gearButton() {
-        Button b = new Button("\u2699");
+        Label icon = new Label("\u2699");
+        icon.setStyle("-fx-text-fill: " + PersonaMenuTheme.ACCENT_GLOW + ";"
+                + "-fx-font-family: 'System';"
+                + "-fx-font-size: 16px;");
+
+        Button b = new Button();
+        b.setGraphic(icon);
+        b.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
         b.setStyle(PersonaMenuTheme.gearButton());
-        b.setMinSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
-        b.setPrefSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
-        b.setMaxSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
+        double s = PersonaMenuTheme.BTN_HEIGHT;
+        b.setMinSize(s, s);
+        b.setPrefSize(s, s);
+        b.setMaxSize(s, s);
         return b;
     }
 
