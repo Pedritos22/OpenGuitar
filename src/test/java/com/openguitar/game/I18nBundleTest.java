@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
@@ -16,15 +15,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Weryfikuje kompletność plików {@code messages_xx.properties} na classpath. */
 class I18nBundleTest {
-
-    private static final List<String> ENGLISH_GAME_STRING_KEYS = List.of(
-            "game.countdown.go",
-            "game.judgment.perfect",
-            "game.judgment.great",
-            "game.judgment.miss",
-            "game.popup.multiplier",
-            "game.popup.combo_break"
-    );
 
     @Test
     void eachSupportedLocaleShouldDefineAllEnglishKeys() throws Exception {
@@ -70,18 +60,13 @@ class I18nBundleTest {
     }
 
     @Test
-    void rhythmGameStringsShouldStayEnglishInEveryBundle() throws Exception {
+    void gameHudKeysShouldDifferBetweenPolishAndEnglish() throws Exception {
         Properties english = loadBundle("en");
-        for (String key : ENGLISH_GAME_STRING_KEYS) {
-            String expected = english.getProperty(key);
-            assertFalse(expected.isBlank(), "English reference missing: " + key);
-
-            for (String tag : GameSettings.LOCALE_TAGS) {
-                Properties locale = loadBundle(tag);
-                assertEquals(expected, locale.getProperty(key),
-                        () -> tag + " should keep English game term for " + key);
-            }
-        }
+        Properties polish = loadBundle("pl");
+        assertFalse(english.getProperty("game.hud.score").isBlank());
+        assertFalse(polish.getProperty("game.hud.score").isBlank());
+        assertFalse(english.getProperty("game.hud.score")
+                .equals(polish.getProperty("game.hud.score")));
     }
 
     @Test

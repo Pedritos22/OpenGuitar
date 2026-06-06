@@ -440,7 +440,7 @@ Changing language calls `GameSettings.setLocaleTag()` → `I18n.setLocaleTag()` 
 
 - Bundles: `src/main/resources/i18n/messages_{pl,en,de,es,fr,it}.properties` (UTF-8).
 - Missing keys: active locale → English → key name.
-- Rhythm-game terms (`GO!`, `PERFECT!`, `SCORE`, `COMBO`, etc.) stay English in every bundle.
+- In-game UI strings (`game.hud.*`, `game.judgment.*`, `game.results.*`, `game.popup.*`) are translated in each bundle.
 - `locale.name.*` keys provide native language labels in the settings picker.
 
 ---

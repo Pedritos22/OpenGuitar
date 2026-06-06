@@ -97,7 +97,7 @@ The settings panel is shared on the title screen and song list.
 | **GAMEPLAY** | Reaction time (2.2 s / 1.7 s / 1.2 s — how early notes appear), pre-start countdown, countdown on resume, hit popups (PERFECT/GREAT/MISS), combo and multiplier popups |
 | **DISPLAY** | Fullscreen on launch, UI language |
 
-Supported languages: **Polish**, **English**, **German**, **Spanish**, **French**, and **Italian**. Rhythm-game terms (PERFECT, SCORE, COMBO, GO!) stay in English across all locales.
+Supported languages: **Polish**, **English**, **German**, **Spanish**, **French**, and **Italian**. In-game HUD, judgments, results, and popups are localized per language.
 
 Settings are saved to `settings.properties` (e.g. `gameplay.reaction.time`, `audio.ui.sfx.volume`, `popups.combo`, `gameplay.countdown.resume`, `display.fullscreen.start`, `display.locale`).
 

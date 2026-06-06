@@ -83,6 +83,7 @@ public final class MenuScreen {
     private Label statBestCaption;
     private Label statComboCaption;
     private Label songsCaptionLabel;
+    private Button songsFolderButton;
     private Button historyButton;
     private Button refreshButton;
     private Button backButton;
@@ -147,9 +148,9 @@ public final class MenuScreen {
         title.setAlignment(Pos.CENTER_LEFT);
         PersonaMenuFx.slant(title, -0.18); // pochył „logo” w stylu P3R
 
-        Button songsBtn = toolbarButton(I18n.get("menu.songs"));
-        songsBtn.setOnAction(e -> openSongsFolder());
-        HBox.setMargin(songsBtn, new Insets(0, 0, 0, 16));
+        songsFolderButton = toolbarButton(I18n.get("menu.songs"));
+        songsFolderButton.setOnAction(e -> openSongsFolder());
+        HBox.setMargin(songsFolderButton, new Insets(0, 0, 0, 16));
 
         HBox top = new HBox(12);
         top.setAlignment(Pos.CENTER_LEFT);
@@ -157,7 +158,7 @@ public final class MenuScreen {
         if (logo != null) {
             top.getChildren().add(logo);
         }
-        top.getChildren().addAll(title, songsBtn);
+        top.getChildren().addAll(title, songsFolderButton);
 
         Region divider = new Region();
         divider.setStyle(PersonaMenuTheme.divider());
@@ -202,6 +203,9 @@ public final class MenuScreen {
         }
         if (statComboCaption != null) {
             statComboCaption.setText(I18n.get("menu.stats.combo"));
+        }
+        if (songsFolderButton != null) {
+            songsFolderButton.setText(I18n.get("menu.songs"));
         }
         if (songsCaptionLabel != null) {
             songsCaptionLabel.setText(I18n.get("menu.songs.caption"));

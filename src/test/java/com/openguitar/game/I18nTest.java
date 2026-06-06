@@ -86,12 +86,15 @@ class I18nTest {
     }
 
     @Test
-    void gameStringsShouldStayConsistentAcrossLocales() {
-        for (String tag : GameSettings.LOCALE_TAGS) {
-            I18n.setLocaleTag(tag);
-            assertEquals("GO!", I18n.get("game.countdown.go"));
-            assertEquals("PERFECT!", I18n.get("game.judgment.perfect"));
-            assertEquals("COMBO BREAK", I18n.get("game.popup.combo_break"));
-        }
+    void gameHudShouldUseLocalizedLabels() {
+        I18n.setLocaleTag("pl");
+        assertEquals("WYNIK", I18n.get("game.hud.score"));
+        assertEquals("SERIA", I18n.get("game.hud.combo"));
+        assertEquals("IDEALNIE!", I18n.get("game.judgment.perfect"));
+
+        I18n.setLocaleTag("en");
+        assertEquals("SCORE", I18n.get("game.hud.score"));
+        assertEquals("COMBO", I18n.get("game.hud.combo"));
+        assertEquals("PERFECT!", I18n.get("game.judgment.perfect"));
     }
 }
