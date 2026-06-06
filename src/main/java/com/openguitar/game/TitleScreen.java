@@ -37,9 +37,11 @@ public final class TitleScreen {
 
     private final List<Item> items = new ArrayList<>();
     private int selectedIndex = 0;
+    private Label taglineLabel;
 
     public TitleScreen(Runnable onPlay, Runnable onExit) {
         this.onExit = onExit;
+        settings.setOnLocaleChanged(this::refreshLocale);
 
         MenuBackground background = new MenuBackground();
         background.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
@@ -89,17 +91,17 @@ public final class TitleScreen {
         }
         brandRow.getChildren().add(word);
 
-        Label tagline = new Label("· CZY DOTRZYMASZ RYTMU?");
-        tagline.setFont(PersonaFonts.label(16));
-        tagline.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
-        tagline.setPadding(new Insets(2, 0, 0, 4));
+        taglineLabel = new Label(I18n.get("title.tagline"));
+        taglineLabel.setFont(PersonaFonts.label(16));
+        taglineLabel.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
+        taglineLabel.setPadding(new Insets(2, 0, 0, 4));
 
         Region divider = new Region();
         divider.setStyle(PersonaMenuTheme.divider());
         divider.setMaxWidth(360);
         VBox.setMargin(divider, new Insets(8, 0, 0, 4));
 
-        VBox brand = new VBox(4, brandRow, tagline, divider);
+        VBox brand = new VBox(4, brandRow, taglineLabel, divider);
         brand.setAlignment(Pos.CENTER_LEFT);
         return brand;
     }
@@ -108,31 +110,41 @@ public final class TitleScreen {
         VBox menu = new VBox(12);
         menu.setAlignment(Pos.CENTER_LEFT);
         menu.getChildren().addAll(
-                buildItem("GRAJ", "Wybierz utwór i zagraj", () -> {
+                buildItem("title.play", "title.play.sub", () -> {
                     SoundManager.get().play(SoundManager.Sfx.CONFIRM);
                     onPlay.run();
                 }),
-                buildItem("USTAWIENIA", "Sterowanie, dźwięk i rozgrywka",
+                buildItem("title.settings", "title.settings.sub",
                         () -> settings.open(root)),
-                buildItem("WYJŚCIE", "Zamknij grę", () -> {
+                buildItem("title.exit", "title.exit.sub", () -> {
                     SoundManager.get().play(SoundManager.Sfx.BACK);
                     onExit.run();
                 }));
         return menu;
     }
 
-    private HBox buildItem(String text, String subtitle, Runnable action) {
+    private void refreshLocale() {
+        if (taglineLabel != null) {
+            taglineLabel.setText(I18n.get("title.tagline"));
+        }
+        for (Item item : items) {
+            item.label.setText(I18n.get(item.titleKey));
+            item.sub.setText(I18n.get(item.subKey));
+        }
+    }
+
+    private HBox buildItem(String titleKey, String subKey, Runnable action) {
         Region marker = new Region();
         marker.setMinSize(6, 40);
         marker.setPrefSize(6, 40);
         marker.setMaxSize(6, 40);
         marker.setStyle("-fx-background-color: " + PersonaMenuTheme.ACCENT + ";");
 
-        Label label = new Label(text);
+        Label label = new Label(I18n.get(titleKey));
         label.setFont(PersonaFonts.display(40));
         label.setTextFill(Color.web(PersonaMenuTheme.TEXT));
 
-        Label sub = new Label(subtitle);
+        Label sub = new Label(I18n.get(subKey));
         sub.setFont(PersonaFonts.body(12));
         sub.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
 
@@ -148,7 +160,7 @@ public final class TitleScreen {
         PersonaMenuFx.SlideControl slide = PersonaMenuFx.hoverSlide(node, 22);
 
         final int index = items.size();
-        Item item = new Item(node, label, marker, action, slide);
+        Item item = new Item(node, label, sub, marker, titleKey, subKey, action, slide);
         items.add(item);
         applyItemStyle(item, false);
 
@@ -248,14 +260,21 @@ public final class TitleScreen {
     private static final class Item {
         final HBox node;
         final Label label;
+        final Label sub;
         final Region marker;
+        final String titleKey;
+        final String subKey;
         final Runnable action;
         final PersonaMenuFx.SlideControl slide;
 
-        Item(HBox node, Label label, Region marker, Runnable action, PersonaMenuFx.SlideControl slide) {
+        Item(HBox node, Label label, Label sub, Region marker,
+             String titleKey, String subKey, Runnable action, PersonaMenuFx.SlideControl slide) {
             this.node = node;
             this.label = label;
+            this.sub = sub;
             this.marker = marker;
+            this.titleKey = titleKey;
+            this.subKey = subKey;
             this.action = action;
             this.slide = slide;
         }
