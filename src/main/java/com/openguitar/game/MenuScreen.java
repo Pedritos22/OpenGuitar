@@ -75,10 +75,17 @@ public final class MenuScreen {
     private int selectedIndex = -1;
 
     /** Panel statystyk — przypisany do aktualnie wybranej piosenki. */
-    private final Label statCaption = new Label("STATYSTYKI");
+    private final Label statCaption = new Label(I18n.get("menu.stats.caption"));
     private final Label statPlays = statValueLabel();
     private final Label statBest = statValueLabel();
     private final Label statCombo = statValueLabel();
+    private Label statPlaysCaption;
+    private Label statBestCaption;
+    private Label statComboCaption;
+    private Label songsCaptionLabel;
+    private Button historyButton;
+    private Button refreshButton;
+    private Button backButton;
 
     public MenuScreen(Path songsDir, Consumer<SongContext> onSongSelected, Runnable onExit,
                       StatsStore stats) {
@@ -86,6 +93,10 @@ public final class MenuScreen {
         this.onSongSelected = onSongSelected;
         this.onExit = onExit;
         this.stats = stats;
+        settings.setOnLocaleChanged(() -> {
+            refreshLocale();
+            reload();
+        });
 
         MenuBackground background = new MenuBackground();
         background.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
@@ -136,7 +147,7 @@ public final class MenuScreen {
         title.setAlignment(Pos.CENTER_LEFT);
         PersonaMenuFx.slant(title, -0.18); // pochył „logo” w stylu P3R
 
-        Button songsBtn = toolbarButton("Songs");
+        Button songsBtn = toolbarButton(I18n.get("menu.songs"));
         songsBtn.setOnAction(e -> openSongsFolder());
         HBox.setMargin(songsBtn, new Insets(0, 0, 0, 16));
 
@@ -160,10 +171,13 @@ public final class MenuScreen {
     private VBox buildStatsBar() {
         statCaption.setStyle(PersonaMenuTheme.sectionLabel());
 
+        statPlaysCaption = statCaptionLabel(I18n.get("menu.stats.plays"));
+        statBestCaption = statCaptionLabel(I18n.get("menu.stats.best"));
+        statComboCaption = statCaptionLabel(I18n.get("menu.stats.combo"));
         HBox chips = new HBox(8,
-                statChip("PODEJŚCIA", statPlays),
-                statChip("NAJLEPSZY WYNIK", statBest),
-                statChip("MAX COMBO", statCombo));
+                statChip(statPlaysCaption, statPlays),
+                statChip(statBestCaption, statBest),
+                statChip(statComboCaption, statCombo));
         chips.setMaxWidth(Double.MAX_VALUE);
 
         VBox box = new VBox(6, statCaption, chips);
@@ -178,8 +192,43 @@ public final class MenuScreen {
         return v;
     }
 
-    private static Region statChip(String label, Label valueLabel) {
-        Label l = new Label(label);
+    private void refreshLocale() {
+        statCaption.setText(I18n.get("menu.stats.caption"));
+        if (statPlaysCaption != null) {
+            statPlaysCaption.setText(I18n.get("menu.stats.plays"));
+        }
+        if (statBestCaption != null) {
+            statBestCaption.setText(I18n.get("menu.stats.best"));
+        }
+        if (statComboCaption != null) {
+            statComboCaption.setText(I18n.get("menu.stats.combo"));
+        }
+        if (songsCaptionLabel != null) {
+            songsCaptionLabel.setText(I18n.get("menu.songs.caption"));
+        }
+        if (historyButton != null) {
+            historyButton.setText(I18n.get("menu.history"));
+        }
+        if (refreshButton != null) {
+            refreshButton.setText(I18n.get("menu.refresh"));
+        }
+        if (backButton != null) {
+            backButton.setText(I18n.get("menu.back"));
+        }
+        if (selectedIndex >= 0 && selectedIndex < navRows.size()) {
+            updateStatsPanel(navRows.get(selectedIndex));
+        }
+    }
+
+    private static Label statCaptionLabel(String text) {
+        Label l = new Label(text);
+        l.setFont(PersonaFonts.label(10));
+        l.setTextFill(Color.web(PersonaMenuTheme.ACCENT));
+        return l;
+    }
+
+    private static Region statChip(Label caption, Label valueLabel) {
+        Label l = caption;
         l.setFont(PersonaFonts.label(10));
         l.setTextFill(Color.web(PersonaMenuTheme.ACCENT));
 
@@ -197,7 +246,8 @@ public final class MenuScreen {
 
     /** Aktualizuje panel statystyk pod kątem aktualnie wybranego wiersza. */
     private void updateStatsPanel(RowHandle h) {
-        statCaption.setText("STATYSTYKI · " + (h.title != null ? h.title : "—"));
+        statCaption.setText(I18n.format("menu.stats.caption.song",
+                h.title != null ? h.title : "—"));
         var stat = (h.songId != null) ? stats.forSong(h.songId) : java.util.Optional.<StatsStore.SongStat>empty();
         statPlays.setText(stat.map(s -> String.valueOf(s.plays)).orElse("0"));
         statBest.setText(stat.map(s -> formatNumber(s.bestScore)).orElse("0"));
@@ -210,8 +260,9 @@ public final class MenuScreen {
     }
 
     private VBox buildListArea() {
-        Label caption = new Label("Utwory");
-        caption.setStyle(PersonaMenuTheme.sectionLabel());
+        songsCaptionLabel = new Label(I18n.get("menu.songs.caption"));
+        songsCaptionLabel.setStyle(PersonaMenuTheme.sectionLabel());
+        Label caption = songsCaptionLabel;
 
         ScrollPane scroll = new ScrollPane(songsList);
         scroll.setFitToWidth(true);
@@ -227,20 +278,20 @@ public final class MenuScreen {
     private VBox buildFooter() {
         Button settingsBtn = gearButton();
         settingsBtn.setOnAction(e -> openSettings());
-        Button history = toolbarButton("Historia");
-        history.setOnAction(e -> openHistoryForSelection());
-        Button refresh = toolbarButton("Odśwież");
-        refresh.setOnAction(e -> {
+        historyButton = toolbarButton(I18n.get("menu.history"));
+        historyButton.setOnAction(e -> openHistoryForSelection());
+        refreshButton = toolbarButton(I18n.get("menu.refresh"));
+        refreshButton.setOnAction(e -> {
             SoundManager.get().play(SoundManager.Sfx.NAV);
             reload();
         });
-        Button exit = toolbarButton("Powrót");
-        exit.setOnAction(e -> {
+        backButton = toolbarButton(I18n.get("menu.back"));
+        backButton.setOnAction(e -> {
             SoundManager.get().play(SoundManager.Sfx.BACK);
             onExit.run();
         });
 
-        HBox actions = new HBox(8, settingsBtn, history, refresh, exit);
+        HBox actions = new HBox(8, settingsBtn, historyButton, refreshButton, backButton);
         actions.setAlignment(Pos.CENTER_RIGHT);
         actions.setMinWidth(Region.USE_PREF_SIZE);
         HBox.setHgrow(actions, Priority.NEVER);
@@ -285,10 +336,11 @@ public final class MenuScreen {
         meta.setFont(PersonaMenuTheme.bodyFont(10));
         if (ready) {
             stats.forSong(entry.context().songId()).ifPresent(st ->
-                    meta.setText(meta.getText() + "   ·   BEST " + formatNumber(st.bestScore)));
+                    meta.setText(meta.getText() + "   ·   "
+                            + I18n.format("menu.row.best", formatNumber(st.bestScore))));
         }
 
-        Label badge = new Label(ready ? "Gotowe" : "Brak mapy");
+        Label badge = new Label(ready ? I18n.get("menu.row.ready") : I18n.get("menu.row.no_map"));
         badge.setStyle(ready ? PersonaMenuTheme.badgeReady() : PersonaMenuTheme.badgePending());
         badge.setAlignment(Pos.CENTER);
         badge.setMinHeight(PersonaMenuTheme.BTN_HEIGHT);
@@ -301,7 +353,7 @@ public final class MenuScreen {
         info.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(info, Priority.ALWAYS);
 
-        Button action = rowButton(ready ? "Graj" : "Generuj", !ready);
+        Button action = rowButton(ready ? I18n.get("menu.row.play") : I18n.get("menu.row.generate"), !ready);
 
         HBox actions = new HBox(8, badge, action);
         actions.setAlignment(Pos.CENTER);
@@ -429,13 +481,13 @@ public final class MenuScreen {
         try {
             List<SongEntry> entries = new SongLibrary(songsDir).scan();
             if (entries.isEmpty()) {
-                Label empty = new Label("Brak utworów.\nKliknij Songs i wrzuć pliki .mp3 lub .wav.");
+                Label empty = new Label(I18n.get("menu.empty"));
                 empty.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
                 empty.setFont(PersonaMenuTheme.bodyFont(12));
                 empty.setWrapText(true);
                 empty.setStyle(PersonaMenuTheme.emptyCard());
                 songsList.getChildren().add(empty);
-                setStatus("Pusty folder songs");
+                setStatus(I18n.get("menu.status.empty_folder"));
                 return;
             }
             int i = 1;
@@ -451,10 +503,10 @@ public final class MenuScreen {
                 select(0);
             }
             int ready = (int) entries.stream().filter(SongEntry::hasBeatmap).count();
-            setStatus(entries.size() + " utworów · " + ready + " gotowych");
+            setStatus(I18n.format("menu.status.song_count", entries.size(), ready));
         } catch (Exception ex) {
             LOG.log(Level.WARNING, "Skanowanie songs/ nie powiodło się", ex);
-            setStatus("Błąd: " + ex.getMessage());
+            setStatus(I18n.format("menu.status.error", ex.getMessage()));
         }
     }
 
@@ -462,14 +514,14 @@ public final class MenuScreen {
         try {
             Files.createDirectories(songsDir);
             if (!Desktop.isDesktopSupported()) {
-                setStatus("Otwieranie folderu niedostępne");
+                setStatus(I18n.get("menu.status.folder_unavailable"));
                 return;
             }
             Desktop.getDesktop().open(songsDir.toFile());
-            setStatus("Otwarto folder songs");
+            setStatus(I18n.get("menu.status.folder_opened"));
         } catch (Exception ex) {
             LOG.log(Level.WARNING, "Nie udało się otworzyć folderu songs/", ex);
-            setStatus("Nie udało się otworzyć songs/");
+            setStatus(I18n.get("menu.status.folder_failed"));
         }
     }
 
@@ -483,9 +535,9 @@ public final class MenuScreen {
             SongContext[] ctx, SongEntry entry, SongContext generated) {
         ctx[0] = generated;
         action.setDisable(false);
-        action.setText("Graj");
+        action.setText(I18n.get("menu.row.play"));
         action.setStyle(PersonaMenuTheme.rowActionPrimary());
-        badge.setText("Gotowe");
+        badge.setText(I18n.get("menu.row.ready"));
         badge.setStyle(PersonaMenuTheme.badgeReady());
         meta.setText(metaLine(entry, generated));
         for (RowHandle h : navRows) {
@@ -511,7 +563,7 @@ public final class MenuScreen {
             Label badge, Label meta, SongContext[] ctx) {
         button.setDisable(true);
         button.setText("…");
-        setStatus("Analiza: " + entry.audioPath().getFileName());
+        setStatus(I18n.format("menu.status.analyzing", entry.audioPath().getFileName()));
 
         Task<SongContext> task = new Task<>() {
             @Override
@@ -524,15 +576,15 @@ public final class MenuScreen {
             }
         };
         task.setOnSucceeded(ev -> {
-            setStatus("Gotowe — kliknij Graj");
+            setStatus(I18n.get("menu.status.ready"));
             applyReadyRow(row, badge, meta, button, ctx, entry, task.getValue());
         });
         task.setOnFailed(ev -> {
             Throwable t = task.getException();
             LOG.log(Level.WARNING, "Generacja beatmapy nie powiodła się", t);
             button.setDisable(false);
-            button.setText("Ponów");
-            setStatus("Błąd: " + (t != null ? t.getMessage() : "?"));
+            button.setText(I18n.get("menu.row.retry"));
+            setStatus(I18n.format("menu.status.error", t != null ? t.getMessage() : "?"));
         });
         Thread thread = new Thread(task, "BeatmapGen-" + entry.title());
         thread.setDaemon(true);
@@ -654,12 +706,12 @@ public final class MenuScreen {
             return;
         }
         if (selectedIndex < 0 || selectedIndex >= navRows.size()) {
-            setStatus("Najpierw wybierz utwór");
+            setStatus(I18n.get("menu.status.select_song"));
             return;
         }
         RowHandle h = navRows.get(selectedIndex);
         if (h.songId == null) {
-            setStatus("Najpierw wygeneruj mapę dla tego utworu");
+            setStatus(I18n.get("menu.status.generate_first"));
             return;
         }
         List<StatsStore.PlayRecord> records = stats.history(h.songId, HISTORY_LIMIT);
@@ -677,7 +729,7 @@ public final class MenuScreen {
     }
 
     private StackPane buildHistoryOverlay(String title, List<StatsStore.PlayRecord> records) {
-        Label heading = new Label("HISTORIA");
+        Label heading = new Label(I18n.get("menu.history.title"));
         heading.setFont(PersonaFonts.display(34));
         heading.setTextFill(Color.web(PersonaMenuTheme.ACCENT));
 
@@ -691,7 +743,7 @@ public final class MenuScreen {
         VBox list = new VBox(6);
         list.setFillWidth(true);
         if (records.isEmpty()) {
-            Label empty = new Label("Brak podejść — zagraj ten utwór, by zobaczyć historię.");
+            Label empty = new Label(I18n.get("menu.history.empty"));
             empty.setWrapText(true);
             empty.setFont(PersonaMenuTheme.bodyFont(12));
             empty.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
@@ -711,7 +763,7 @@ public final class MenuScreen {
         scroll.setPrefHeight(HEIGHT * 0.5);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        Label hint = new Label("ESC — zamknij");
+        Label hint = new Label(I18n.get("menu.history.close"));
         hint.setFont(PersonaFonts.body(12));
         hint.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
 
@@ -747,12 +799,11 @@ public final class MenuScreen {
         rankBox.setMaxSize(34, Region.USE_PREF_SIZE);
         StackPane.setAlignment(rank, Pos.CENTER);
 
-        Label score = new Label("#" + attempt + "   " + formatNumber(rec.score) + " pkt");
+        Label score = new Label(I18n.format("menu.history.row", attempt, formatNumber(rec.score)));
         score.setFont(PersonaMenuTheme.labelFont(13));
         score.setTextFill(Color.web(PersonaMenuTheme.TEXT));
 
-        Label detail = new Label(String.format(
-                "PERFECT %d · GREAT %d · MISS %d · COMBO %d · %.1f%%",
+        Label detail = new Label(I18n.format("menu.history.stats",
                 rec.perfect, rec.great, rec.misses, rec.maxCombo, rec.accuracy * 100.0));
         detail.setFont(PersonaMenuTheme.bodyFont(10));
         detail.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
@@ -815,7 +866,7 @@ public final class MenuScreen {
     private static String metaLine(SongEntry entry, SongContext ctx) {
         String m = entry.audioPath().getFileName().toString();
         if (ctx != null) {
-            m += " · " + ctx.notes().size() + " nut · " + ctx.bpm() + " BPM";
+            m += " · " + I18n.format("menu.row.meta", ctx.notes().size(), ctx.bpm());
         }
         return m;
     }

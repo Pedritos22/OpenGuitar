@@ -49,12 +49,13 @@ public class GameApp extends Application {
     @Override
     public void start(Stage stage) {
         com.openguitar.game.view.PersonaFonts.init(); // ładujemy fonty P3R raz, przed budową scen
+        I18n.setLocaleTag(GameSettings.get().localeTag());
         this.stage = stage;
         stage.setResizable(true);
-        stage.setTitle("OpenGuitar");
+        stage.setTitle(I18n.get("app.title"));
         // F11 przełącza pełny ekran; ESC ma być wolny dla pauzy (nie wychodzi z fullscreen).
         stage.setFullScreenExitKeyCombination(KeyCombination.NO_MATCH);
-        stage.setFullScreenExitHint("F11 — przełącz pełny ekran");
+        stage.setFullScreenExitHint(I18n.get("app.fullscreen.hint"));
         stage.addEventHandler(KeyEvent.KEY_PRESSED, e -> {
             if (e.getCode() == KeyCode.F11) {
                 stage.setFullScreen(!stage.isFullScreen());
