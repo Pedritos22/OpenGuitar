@@ -115,7 +115,7 @@ public final class GameScreen {
     private static final long AUDIO_STALL_NANOS = 2_500_000_000L;
 
     /** Opcje ekranu pauzy. */
-    private static final String[] PAUSE_OPTIONS = {"WZNÓW", "WYJDŹ DO MENU"};
+    private static final int PAUSE_OPTION_COUNT = 2;
     private static final Font RANK_STAMP_FONT = PersonaFonts.display(140);
     private static final double RANK_STAMP_RING_RADIUS = 78;
 
@@ -701,11 +701,11 @@ public final class GameScreen {
         switch (key) {
             case ESCAPE -> resumeGame();
             case UP, LEFT -> {
-                pauseSelection = Math.floorMod(pauseSelection - 1, PAUSE_OPTIONS.length);
+                pauseSelection = Math.floorMod(pauseSelection - 1, PAUSE_OPTION_COUNT);
                 SoundManager.get().play(SoundManager.Sfx.NAV);
             }
             case DOWN, RIGHT -> {
-                pauseSelection = Math.floorMod(pauseSelection + 1, PAUSE_OPTIONS.length);
+                pauseSelection = Math.floorMod(pauseSelection + 1, PAUSE_OPTION_COUNT);
                 SoundManager.get().play(SoundManager.Sfx.NAV);
             }
             case ENTER, SPACE -> activatePauseOption();
@@ -888,9 +888,9 @@ public final class GameScreen {
                 : HIT_LINE_Y - NOTE_HEIGHT;
 
         String label = switch (judgment) {
-            case PERFECT -> "PERFECT!";
-            case GREAT   -> "GREAT!";
-            case MISS    -> "MISS";
+            case PERFECT -> I18n.get("game.judgment.perfect");
+            case GREAT   -> I18n.get("game.judgment.great");
+            case MISS    -> I18n.get("game.judgment.miss");
         };
         Color color = switch (judgment) {
             case PERFECT -> Color.web("#67e8f9");
@@ -980,7 +980,7 @@ public final class GameScreen {
         double phase; // 0..1 w obrębie bieżącej fazy (do animacji „pop”)
         Color color;
         if (isGo) {
-            text = "GO!";
+            text = I18n.get("game.countdown.go");
             phase = clamp01((elapsed - numbersNanos) / (double) GO_FLASH_NANOS);
             color = PersonaPalette.TEAL;
         } else {
@@ -1009,10 +1009,18 @@ public final class GameScreen {
         g.restore();
 
         if (!isGo) {
-            PersonaText.plain(g, "PRZYGOTUJ SIĘ", CANVAS_WIDTH / 2.0, cy + 118,
+            PersonaText.plain(g, I18n.get("game.countdown.prepare"), CANVAS_WIDTH / 2.0, cy + 118,
                     PersonaFonts.label(14),
                     PersonaPalette.alpha(PersonaPalette.WHITE_DIM, 0.85), TextAlignment.CENTER);
         }
+    }
+
+    private static String pauseOptionLabel(int index) {
+        return switch (index) {
+            case 0 -> I18n.get("game.pause.resume");
+            case 1 -> I18n.get("game.pause.quit_menu");
+            default -> "";
+        };
     }
 
     /** Ekran pauzy w stylu Persona 3 Reload — przyciemnienie + ukośne opcje. */
@@ -1032,7 +1040,7 @@ public final class GameScreen {
         g.strokeLine(0, bandY - 64, CANVAS_WIDTH, bandY - 64 + (92 - 36));
         g.strokeLine(0, bandY + 92, CANVAS_WIDTH, bandY + 92 - (92 - 36));
 
-        PersonaText.draw(g, "PAUZA", CANVAS_WIDTH / 2.0, bandY + 22,
+        PersonaText.draw(g, I18n.get("game.pause.title"), CANVAS_WIDTH / 2.0, bandY + 22,
                 PersonaFonts.display(64), PersonaPalette.WHITE,
                 PersonaPalette.BLACK, 4, PersonaPalette.alpha(PersonaPalette.AQUA, 0.55),
                 PersonaText.SLANT, TextAlignment.CENTER);
@@ -1040,7 +1048,7 @@ public final class GameScreen {
         // Opcje
         double startY = CANVAS_HEIGHT * 0.52;
         double pulse = 0.5 + 0.5 * Math.sin(nowNanos / 180_000_000.0);
-        for (int i = 0; i < PAUSE_OPTIONS.length; i++) {
+        for (int i = 0; i < PAUSE_OPTION_COUNT; i++) {
             boolean sel = i == pauseSelection;
             double cx = CANVAS_WIDTH / 2.0;
             double y = startY + i * 70;
@@ -1065,15 +1073,15 @@ public final class GameScreen {
             }
 
             Color fill = sel ? PersonaPalette.WHITE : PersonaPalette.WHITE_DIM;
-            PersonaText.draw(g, PAUSE_OPTIONS[i], cx + slideX, y + 11,
+            PersonaText.draw(g, pauseOptionLabel(i), cx + slideX, y + 11,
                     PersonaFonts.heading(sel ? 32 : 27), fill,
                     PersonaPalette.BLACK, 3,
                     sel ? PersonaPalette.alpha(PersonaPalette.AQUA, 0.5) : null,
                     PersonaText.SLANT, TextAlignment.CENTER);
         }
 
-        PersonaText.plain(g, "↑/↓  wybór      ENTER  zatwierdź      ESC  wznów",
-                CANVAS_WIDTH / 2.0, CANVAS_HEIGHT * 0.52 + PAUSE_OPTIONS.length * 70 + 24,
+        PersonaText.plain(g, I18n.get("game.pause.hint"),
+                CANVAS_WIDTH / 2.0, CANVAS_HEIGHT * 0.52 + PAUSE_OPTION_COUNT * 70 + 24,
                 PersonaFonts.body(13), PersonaPalette.MUTED, TextAlignment.CENTER);
     }
 
@@ -1107,7 +1115,7 @@ public final class GameScreen {
         g.setLineWidth(2);
         g.strokeLine(0, bandY - 50, CANVAS_WIDTH, bandY - 50 + 90);
         g.strokeLine(0, bandY + 60, CANVAS_WIDTH, bandY + 60 - 90);
-        PersonaText.draw(g, "WYNIKI", CANVAS_WIDTH / 2.0, bandY + 18,
+        PersonaText.draw(g, I18n.get("game.results.title"), CANVAS_WIDTH / 2.0, bandY + 18,
                 PersonaFonts.display(52), PersonaPalette.alpha(PersonaPalette.WHITE, head),
                 PersonaPalette.alpha(PersonaPalette.BLACK, head), 4,
                 PersonaPalette.alpha(PersonaPalette.AQUA, 0.5 * head),
@@ -1117,22 +1125,22 @@ public final class GameScreen {
                 TextAlignment.CENTER);
 
         // ── wiersze statystyk (staggered count-up) ──
-        drawResultRow(g, 346, "PERFECT", String.valueOf(countUp(result.perfect(), el, 0.20)),
+        drawResultRow(g, 346, I18n.get("game.results.perfect"), String.valueOf(countUp(result.perfect(), el, 0.20)),
                 PersonaPalette.PERFECT, el, 0.20);
-        drawResultRow(g, 386, "GREAT", String.valueOf(countUp(result.great(), el, 0.34)),
+        drawResultRow(g, 386, I18n.get("game.results.great"), String.valueOf(countUp(result.great(), el, 0.34)),
                 PersonaPalette.GREAT, el, 0.34);
-        drawResultRow(g, 426, "MISS", String.valueOf(countUp(result.misses(), el, 0.48)),
+        drawResultRow(g, 426, I18n.get("game.results.miss"), String.valueOf(countUp(result.misses(), el, 0.48)),
                 PersonaPalette.MISS, el, 0.48);
-        drawResultRow(g, 466, "MAX COMBO", String.valueOf(countUp(result.maxCombo(), el, 0.62)),
+        drawResultRow(g, 466, I18n.get("game.results.max_combo"), String.valueOf(countUp(result.maxCombo(), el, 0.62)),
                 PersonaPalette.COMBO, el, 0.62);
         double accShown = result.accuracy() * 100.0 * clamp01((el - 0.76) / 0.6);
-        drawResultRow(g, 506, "CELNOŚĆ", String.format("%.1f%%", accShown),
+        drawResultRow(g, 506, I18n.get("game.results.accuracy"), String.format("%.1f%%", accShown),
                 PersonaPalette.AQUA, el, 0.76);
 
         // ── wynik (duży) ──
         double sp = clamp01((el - 0.9) / 0.5);
         if (sp > 0) {
-            PersonaText.plain(g, "WYNIK", CANVAS_WIDTH / 2.0, 562, PersonaFonts.label(13),
+            PersonaText.plain(g, I18n.get("game.results.score"), CANVAS_WIDTH / 2.0, 562, PersonaFonts.label(13),
                     PersonaPalette.alpha(PersonaPalette.AQUA, easeOut(sp)), TextAlignment.CENTER);
             int shownScoreVal = (int) Math.round(result.totalScore() * sp);
             PersonaText.draw(g, formatScore(shownScoreVal), CANVAS_WIDTH / 2.0, 612,
@@ -1147,7 +1155,7 @@ public final class GameScreen {
         // ── podpowiedź ──
         if (el > 1.8) {
             double blink = 0.5 + 0.5 * Math.sin(nowNanos / 300_000_000.0);
-            PersonaText.plain(g, "ENTER — powrót do menu", CANVAS_WIDTH / 2.0, 694,
+            PersonaText.plain(g, I18n.get("game.results.return"), CANVAS_WIDTH / 2.0, 694,
                     PersonaFonts.body(13),
                     PersonaPalette.alpha(PersonaPalette.WHITE_DIM, 0.4 + 0.6 * blink),
                     TextAlignment.CENTER);
@@ -1221,7 +1229,7 @@ public final class GameScreen {
                 0, TextAlignment.CENTER);
         g.restore();
 
-        PersonaText.plain(g, "RANGA", cx, cy + 50, PersonaFonts.label(12),
+        PersonaText.plain(g, I18n.get("game.results.rank"), cx, cy + 50, PersonaFonts.label(12),
                 PersonaPalette.alpha(PersonaPalette.WHITE_DIM, a), TextAlignment.CENTER);
     }
 
@@ -1484,17 +1492,17 @@ public final class GameScreen {
 
         // ── panel WYNIK (lewy) ──
         drawGlassPanel(g, 12, 10, 190, 80);
-        PersonaText.plain(g, "SCORE", 26, 32, PersonaFonts.label(13),
+        PersonaText.plain(g, I18n.get("game.hud.score"), 26, 32, PersonaFonts.label(13),
                 PersonaPalette.AQUA, TextAlignment.LEFT);
         drawPopNumber(g, formatScore(scoreVal), 26, 70, 34,
                 popScale(nowNanos, scorePopNanos), PersonaPalette.WHITE, TextAlignment.LEFT);
-        PersonaText.plain(g, "HIT " + score.hits() + "   MISS " + score.misses(), 26, 86,
+        PersonaText.plain(g, I18n.format("game.hud.hit_miss", score.hits(), score.misses()), 26, 86,
                 PersonaFonts.body(11), PersonaPalette.WHITE_DIM, TextAlignment.LEFT);
 
         // ── panel COMBO / MNOŻNIK (prawy) ──
         double rx = CANVAS_WIDTH - 202;
         drawGlassPanel(g, rx, 10, 190, 80);
-        PersonaText.plain(g, "COMBO", CANVAS_WIDTH - 26, 32, PersonaFonts.label(13),
+        PersonaText.plain(g, I18n.get("game.hud.combo"), CANVAS_WIDTH - 26, 32, PersonaFonts.label(13),
                 PersonaPalette.AQUA, TextAlignment.RIGHT);
         Color comboCol = PersonaPalette.comboColor(comboVal);
         drawPopNumber(g, String.valueOf(comboVal), CANVAS_WIDTH - 26, 72, 36,
