@@ -15,31 +15,40 @@ public final class I18n {
 
     private static final String PATH_PREFIX = "/i18n/messages_";
     private static final String PATH_SUFFIX = ".properties";
-    private static final String FALLBACK_TAG = "en";
+private static final String FALLBACK_TAG = "en";
+private static final String DEFAULT_TAG = GameSettings.LOCALE_DEFAULT;
 
-    private static final Properties FALLBACK = load(FALLBACK_TAG);
-    private static Properties active = load("pl");
+private static final Properties FALLBACK = load(FALLBACK_TAG);
+private static Properties active = load(DEFAULT_TAG);
+private static Locale activeLocale = Locale.forLanguageTag(DEFAULT_TAG);
 
-    private I18n() {}
+private I18n() {}
 
-    /** Ustawia aktywny język (tag BCP 47, np. {@code pl}, {@code en}). */
-    public static void setLocaleTag(String tag) {
-        String normalized = GameSettings.normalizeLocaleTag(tag);
-        Properties loaded = load(normalized);
-        active = loaded.isEmpty() ? FALLBACK : loaded;
+/** Ustawia aktywny język (tag BCP 47, np. {@code pl}, {@code en}). */
+public static void setLocaleTag(String tag) {
+    String normalized = GameSettings.normalizeLocaleTag(tag);
+    Properties loaded = load(normalized);
+    if (loaded.isEmpty()) {
+        active = FALLBACK;
+        activeLocale = Locale.forLanguageTag(FALLBACK_TAG);
+    } else {
+        active = loaded;
+        activeLocale = Locale.forLanguageTag(normalized);
     }
+}
 
-    public static String get(String key) {
-        String value = active.getProperty(key);
-        if (value == null) {
-            value = FALLBACK.getProperty(key);
-        }
-        return value != null ? value : key;
+public static String get(String key) {
+    String value = active.getProperty(key);
+    if (value == null) {
+        value = FALLBACK.getProperty(key);
     }
+    return value != null ? value : key;
+}
 
-    public static String format(String key, Object... args) {
-        return MessageFormat.format(get(key), args);
-    }
+public static String format(String key, Object... args) {
+    MessageFormat fmt = new MessageFormat(get(key), activeLocale);
+    return fmt.format(args);
+}
 
     private static Properties load(String tag) {
         Properties p = new Properties();
