@@ -2,6 +2,7 @@ package com.openguitar.game;
 
 import javafx.scene.input.KeyCode;
 
+import java.util.Locale;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -37,6 +38,10 @@ public final class GameSettings {
     public static final int[] REACTION_TIME_MS = {2_200, 1_650, 1_200};
     public static final int REACTION_TIME_DEFAULT = 1;
 
+    /** Obsługiwane języki UI (dodaj {@code messages_xx.properties} w {@code i18n/}). */
+    public static final String[] LOCALE_TAGS = {"pl", "en", "de", "es", "fr", "it"};
+    public static final String LOCALE_DEFAULT = "pl";
+
     private static final KeyCode[] DEFAULT_KEYS = {
             KeyCode.D, KeyCode.F, KeyCode.J, KeyCode.K
     };
@@ -62,6 +67,8 @@ public final class GameSettings {
     private boolean countdownOnResume = true;
     /** Uruchom grę w trybie pełnoekranowym. */
     private boolean fullscreenOnStart = false;
+    /** Tag języka UI (BCP 47), np. {@code pl} lub {@code en}. */
+    private String localeTag = LOCALE_DEFAULT;
 
     private GameSettings() {}
 
@@ -130,7 +137,8 @@ public final class GameSettings {
     /** Etykieta czasu pojawiania się nut, np. {@code "2.2 s"}. */
     public String reactionTimeLabel() {
         int ms = REACTION_TIME_MS[reactionTimePreset];
-        return String.format("%.1f s", ms / 1000.0);
+        return I18n.format("settings.seconds",
+                String.format(Locale.ROOT, "%.1f", ms / 1000.0));
     }
 
     public boolean showComboPopups() {
@@ -143,6 +151,15 @@ public final class GameSettings {
 
     public boolean fullscreenOnStart() {
         return fullscreenOnStart;
+    }
+
+    public String localeTag() {
+        return localeTag;
+    }
+
+    /** Etykieta bieżącego języka w UI ustawień. */
+    public String localeLabel() {
+        return I18n.get("locale.name." + localeTag);
     }
 
     public double lobbyMusicVolumeScale() {
@@ -224,6 +241,39 @@ public final class GameSettings {
         fullscreenOnStart = enabled;
     }
 
+    public void setLocaleTag(String tag) {
+        localeTag = normalizeLocaleTag(tag);
+        I18n.setLocaleTag(localeTag);
+    }
+
+    public void cycleLocale(int delta) {
+        int idx = localeIndex(localeTag);
+        int next = Math.floorMod(idx + delta, LOCALE_TAGS.length);
+        setLocaleTag(LOCALE_TAGS[next]);
+    }
+
+    static String normalizeLocaleTag(String tag) {
+        if (tag == null || tag.isBlank()) {
+            return LOCALE_DEFAULT;
+        }
+        String t = tag.trim().toLowerCase(Locale.ROOT);
+        for (String supported : LOCALE_TAGS) {
+            if (supported.equals(t)) {
+                return t;
+            }
+        }
+        return LOCALE_DEFAULT;
+    }
+
+    private static int localeIndex(String tag) {
+        for (int i = 0; i < LOCALE_TAGS.length; i++) {
+            if (LOCALE_TAGS[i].equals(tag)) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
     public void adjustLobbyMusicVolume(int delta) {
         setLobbyMusicVolume(lobbyMusicVolume + delta);
     }
@@ -279,6 +329,7 @@ public final class GameSettings {
                 p.getProperty("gameplay.countdown.resume", Boolean.toString(countdownOnResume)));
         fullscreenOnStart = Boolean.parseBoolean(
                 p.getProperty("display.fullscreen.start", Boolean.toString(fullscreenOnStart)));
+        setLocaleTag(p.getProperty("display.locale", localeTag));
         dedupeKeys();
     }
 
@@ -298,6 +349,7 @@ public final class GameSettings {
         p.setProperty("popups.combo", Boolean.toString(showComboPopups));
         p.setProperty("gameplay.countdown.resume", Boolean.toString(countdownOnResume));
         p.setProperty("display.fullscreen.start", Boolean.toString(fullscreenOnStart));
+        p.setProperty("display.locale", localeTag);
         try (OutputStream out = Files.newOutputStream(storageFile)) {
             p.store(out, "OpenGuitar — ustawienia użytkownika");
         } catch (Exception ex) {
