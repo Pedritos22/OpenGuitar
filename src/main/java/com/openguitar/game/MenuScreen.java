@@ -15,8 +15,10 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.DragEvent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -26,6 +28,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 
 import java.awt.Desktop;
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -87,6 +90,8 @@ public final class MenuScreen {
     private Button historyButton;
     private Button refreshButton;
     private Button backButton;
+    private ScrollPane songsScroll;
+    private boolean dropZoneHighlighted;
 
     public MenuScreen(Path songsDir, Consumer<SongContext> onSongSelected, Runnable onExit,
                       StatsStore stats) {
@@ -268,13 +273,15 @@ public final class MenuScreen {
         songsCaptionLabel.setStyle(PersonaMenuTheme.sectionLabel());
         Label caption = songsCaptionLabel;
 
-        ScrollPane scroll = new ScrollPane(songsList);
-        scroll.setFitToWidth(true);
-        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scroll.setStyle(PersonaMenuTheme.scrollPane());
-        VBox.setVgrow(scroll, Priority.ALWAYS);
+        songsScroll = new ScrollPane(songsList);
+        songsScroll.setFitToWidth(true);
+        songsScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        songsScroll.setStyle(PersonaMenuTheme.scrollPane());
+        setupSongDropTarget(songsScroll);
+        setupSongDropTarget(songsList);
+        VBox.setVgrow(songsScroll, Priority.ALWAYS);
 
-        VBox block = new VBox(10, caption, scroll);
+        VBox block = new VBox(10, caption, songsScroll);
         VBox.setVgrow(block, Priority.ALWAYS);
         return block;
     }
@@ -480,6 +487,7 @@ public final class MenuScreen {
     // ── logika ─────────────────────────────────────────────────────────────
 
     public void reload() {
+        setDropZoneHighlight(false);
         songsList.getChildren().clear();
         navRows.clear();
         selectedIndex = -1;
@@ -513,6 +521,88 @@ public final class MenuScreen {
             LOG.log(Level.WARNING, "Skanowanie songs/ nie powiodło się", ex);
             setStatus(I18n.format("menu.status.error", ex.getMessage()));
         }
+    }
+
+    private void setupSongDropTarget(javafx.scene.Node node) {
+        node.setOnDragOver(this::handleSongDragOver);
+        node.setOnDragEntered(this::handleSongDragEntered);
+        node.setOnDragExited(this::handleSongDragExited);
+        node.setOnDragDropped(this::handleSongDragDropped);
+    }
+
+    private boolean canAcceptSongDrop(DragEvent e) {
+        if (settings.isOpen() || historyOverlay != null) {
+            return false;
+        }
+        return e.getDragboard().hasFiles()
+                && SongImporter.containsSupportedAudio(toPaths(e.getDragboard().getFiles()));
+    }
+
+    private void handleSongDragOver(DragEvent e) {
+        if (canAcceptSongDrop(e)) {
+            e.acceptTransferModes(TransferMode.COPY);
+        }
+        e.consume();
+    }
+
+    private void handleSongDragEntered(DragEvent e) {
+        if (canAcceptSongDrop(e)) {
+            setDropZoneHighlight(true);
+            setStatus(I18n.get("menu.status.drop_hint"));
+        }
+        e.consume();
+    }
+
+    private void handleSongDragExited(DragEvent e) {
+        setDropZoneHighlight(false);
+        e.consume();
+    }
+
+    private void handleSongDragDropped(DragEvent e) {
+        setDropZoneHighlight(false);
+        if (!canAcceptSongDrop(e)) {
+            e.setDropCompleted(false);
+            e.consume();
+            return;
+        }
+        List<Path> sources = toPaths(e.getDragboard().getFiles());
+        SongImporter.ImportResult result = SongImporter.importAudioFiles(songsDir, sources);
+        e.setDropCompleted(result.hasImported() || result.errors().isEmpty());
+        e.consume();
+        reportImportResult(result);
+        if (result.hasImported()) {
+            SoundManager.get().play(SoundManager.Sfx.CONFIRM);
+            reload();
+        }
+    }
+
+    private static List<Path> toPaths(List<File> files) {
+        return files.stream().map(File::toPath).toList();
+    }
+
+    private void setDropZoneHighlight(boolean on) {
+        if (dropZoneHighlighted == on) {
+            return;
+        }
+        dropZoneHighlighted = on;
+        songsList.setStyle(on ? PersonaMenuTheme.dropZoneActive() : null);
+    }
+
+    private void reportImportResult(SongImporter.ImportResult result) {
+        if (!result.errors().isEmpty()) {
+            setStatus(I18n.format("menu.status.import_failed", result.errors().get(0)));
+            return;
+        }
+        if (result.hasImported()) {
+            if (result.skipped() > 0) {
+                setStatus(I18n.format("menu.status.imported_with_skipped",
+                        result.imported(), result.skipped()));
+            } else {
+                setStatus(I18n.format("menu.status.imported", result.imported()));
+            }
+            return;
+        }
+        setStatus(I18n.get("menu.status.import_none"));
     }
 
     private void openSongsFolder() {
