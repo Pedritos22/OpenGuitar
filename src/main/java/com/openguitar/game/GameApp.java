@@ -35,16 +35,26 @@ import java.util.logging.Logger;
 public class GameApp extends Application {
 
     private static final Logger LOG = Logger.getLogger(GameApp.class.getName());
-    private static final Path SONGS_DIR = Paths.get("songs").toAbsolutePath();
-    private static final Path STATS_FILE = Paths.get("stats.db").toAbsolutePath();
+    private static final Path SONGS_DIR = AppPaths.songsDirectory();
+    private static final Path STATS_FILE = AppPaths.statsFile();
 
-    private final StatsStore stats = new StatsStore(STATS_FILE);
+    private final StatsStore stats;
     private Stage stage;
     /** Czy po zakończeniu utworu wracamy do menu (true), czy zamykamy okno (false). */
     private boolean returnToMenuAfterSong = true;
     /** Aktualnie aktywny GameScreen - trzymamy żeby móc go zatrzymać przy zamykaniu okna. */
     private GameScreen activeGame;
     private volatile boolean shuttingDown;
+
+    public GameApp() {
+        try {
+            AppPaths.ensureDataDirectories();
+        } catch (Exception ex) {
+            LOG.log(Level.WARNING, "Nie udało się utworzyć katalogu danych "
+                    + AppPaths.dataDirectory(), ex);
+        }
+        stats = new StatsStore(STATS_FILE);
+    }
 
     @Override
     public void start(Stage stage) {

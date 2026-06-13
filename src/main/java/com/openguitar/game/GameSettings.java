@@ -7,7 +7,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -21,7 +20,7 @@ public final class GameSettings {
 
     private static final Logger LOG = Logger.getLogger(GameSettings.class.getName());
 
-    private static final Path DEFAULT_FILE = Paths.get("settings.properties").toAbsolutePath();
+    private static final Path DEFAULT_FILE = AppPaths.settingsFile();
     /** Nadpisywany w testach — domyślnie {@link #DEFAULT_FILE}. */
     private static Path storageFile = DEFAULT_FILE;
 
@@ -385,6 +384,15 @@ public final class GameSettings {
         p.setProperty("display.fullscreen.start", Boolean.toString(fullscreenOnStart));
         p.setProperty("audio.mute.unfocused", Boolean.toString(muteWhenUnfocused));
         p.setProperty("display.locale", localeTag);
+        try {
+            Path parent = storageFile.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+        } catch (Exception ex) {
+            LOG.log(Level.WARNING, "Nie udało się utworzyć katalogu ustawień " + storageFile, ex);
+            return;
+        }
         try (OutputStream out = Files.newOutputStream(storageFile)) {
             p.store(out, "OpenGuitar — ustawienia użytkownika");
         } catch (Exception ex) {
