@@ -277,6 +277,8 @@ public final class MenuScreen {
         songsScroll.setFitToWidth(true);
         songsScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         songsScroll.setStyle(PersonaMenuTheme.scrollPane());
+        songsScroll.viewportBoundsProperty().addListener((obs, oldBounds, bounds) ->
+                songsList.setMinHeight(bounds.getHeight()));
         setupSongDropTarget(songsScroll);
         setupSongDropTarget(songsList);
         VBox.setVgrow(songsScroll, Priority.ALWAYS);
@@ -387,7 +389,7 @@ public final class MenuScreen {
 
         final int rowIndex = navRows.size();
         String songId = ready ? entry.context().songId() : null;
-        navRows.add(new RowHandle(row, action, ready, slide, songId, entry.title()));
+        navRows.add(new RowHandle(row, action, ready, slide, songId, entry.title(), entry.audioPath()));
 
         applyRowStyle(row, ready, false);
         // Zaznaczenie ustawia WYŁĄCZNIE klik — dzięki temu można wybrać utwór, a potem
@@ -487,8 +489,10 @@ public final class MenuScreen {
     // ── logika ─────────────────────────────────────────────────────────────
 
     public void reload() {
+        SoundManager.get().stopSongPreview();
         setDropZoneHighlight(false);
         songsList.getChildren().clear();
+        songsList.setAlignment(Pos.TOP_LEFT);
         navRows.clear();
         selectedIndex = -1;
         try {
@@ -499,6 +503,9 @@ public final class MenuScreen {
                 empty.setFont(PersonaMenuTheme.bodyFont(12));
                 empty.setWrapText(true);
                 empty.setStyle(PersonaMenuTheme.emptyCard());
+                empty.setMaxWidth(520);
+                empty.setAlignment(Pos.CENTER);
+                songsList.setAlignment(Pos.CENTER);
                 songsList.getChildren().add(empty);
                 setStatus(I18n.get("menu.status.empty_folder"));
                 return;
@@ -513,7 +520,7 @@ public final class MenuScreen {
                 i++;
             }
             if (!navRows.isEmpty()) {
-                select(0);
+                select(0, SoundManager.Sfx.CLICK_GLASS, false);
             }
             int ready = (int) entries.stream().filter(SongEntry::hasBeatmap).count();
             setStatus(I18n.format("menu.status.song_count", entries.size(), ready));
@@ -756,15 +763,22 @@ public final class MenuScreen {
         int next = (selectedIndex < 0)
                 ? (delta > 0 ? 0 : navRows.size() - 1)
                 : Math.floorMod(selectedIndex + delta, navRows.size());
-        select(next, SoundManager.Sfx.NAV);
+        select(next, SoundManager.Sfx.NAV, true);
     }
 
     private void select(int index) {
-        select(index, SoundManager.Sfx.CLICK_GLASS);
+        select(index, SoundManager.Sfx.CLICK_GLASS, true);
     }
 
-    private void select(int index, SoundManager.Sfx sfx) {
-        if (index < 0 || index >= navRows.size() || index == selectedIndex) {
+    private void select(int index, SoundManager.Sfx sfx, boolean preview) {
+        if (index < 0 || index >= navRows.size()) {
+            return;
+        }
+        if (index == selectedIndex) {
+            if (preview) {
+                SoundManager.get().playSongPreview(navRows.get(index).audioPath);
+                SoundManager.get().play(sfx);
+            }
             return;
         }
         deselectCurrent();
@@ -774,6 +788,9 @@ public final class MenuScreen {
         h.slide.set(true);
         updateStatsPanel(h);
         SoundManager.get().play(sfx);
+        if (preview) {
+            SoundManager.get().playSongPreview(h.audioPath);
+        }
     }
 
     private void deselectCurrent() {
@@ -938,15 +955,17 @@ public final class MenuScreen {
         final PersonaMenuFx.SlideControl slide;
         String songId;
         final String title;
+        final Path audioPath;
 
         RowHandle(HBox node, Button action, boolean ready, PersonaMenuFx.SlideControl slide,
-                  String songId, String title) {
+                  String songId, String title, Path audioPath) {
             this.node = node;
             this.action = action;
             this.ready = ready;
             this.slide = slide;
             this.songId = songId;
             this.title = title;
+            this.audioPath = audioPath;
         }
     }
 
