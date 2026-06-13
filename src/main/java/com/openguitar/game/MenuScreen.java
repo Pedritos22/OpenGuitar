@@ -263,6 +263,13 @@ public final class MenuScreen {
         statCombo.setText(stat.map(s -> String.valueOf(s.maxCombo)).orElse("0"));
     }
 
+    private void resetStatsPanel() {
+        statCaption.setText(I18n.get("menu.stats.caption"));
+        statPlays.setText("—");
+        statBest.setText("—");
+        statCombo.setText("—");
+    }
+
     private static String formatNumber(int n) {
         if (n < 1000) return String.valueOf(n);
         return String.format("%,d", n).replace(',', ' ');
@@ -395,7 +402,11 @@ public final class MenuScreen {
         // Zaznaczenie ustawia WYŁĄCZNIE klik — dzięki temu można wybrać utwór, a potem
         // przejechać kursorem po innych wierszach (np. do przycisku „Historia") bez
         // gubienia wyboru. Najechanie daje tylko chwilowe podświetlenie.
-        row.setOnMouseClicked(e -> select(rowIndex));
+        row.setOnMouseClicked(e -> {
+            if (!clickedButton(e.getTarget(), row)) {
+                select(rowIndex);
+            }
+        });
         row.setOnMouseEntered(e -> hoverRow(rowIndex, true));
         row.setOnMouseExited(e -> hoverRow(rowIndex, false));
 
@@ -495,6 +506,7 @@ public final class MenuScreen {
         songsList.setAlignment(Pos.TOP_LEFT);
         navRows.clear();
         selectedIndex = -1;
+        resetStatsPanel();
         try {
             List<SongEntry> entries = new SongLibrary(songsDir).scan();
             if (entries.isEmpty()) {
@@ -518,9 +530,6 @@ public final class MenuScreen {
                 VBox.setMargin(row, new Insets(0, 0, 0, (i % 2 == 0) ? 18 : 0));
                 songsList.getChildren().add(row);
                 i++;
-            }
-            if (!navRows.isEmpty()) {
-                select(0, SoundManager.Sfx.CLICK_GLASS, false);
             }
             int ready = (int) entries.stream().filter(SongEntry::hasBeatmap).count();
             setStatus(I18n.format("menu.status.song_count", entries.size(), ready));
@@ -763,7 +772,7 @@ public final class MenuScreen {
         int next = (selectedIndex < 0)
                 ? (delta > 0 ? 0 : navRows.size() - 1)
                 : Math.floorMod(selectedIndex + delta, navRows.size());
-        select(next, SoundManager.Sfx.NAV, true);
+        select(next, SoundManager.Sfx.NAV, false);
     }
 
     private void select(int index) {
@@ -791,6 +800,19 @@ public final class MenuScreen {
         if (preview) {
             SoundManager.get().playSongPreview(h.audioPath);
         }
+    }
+
+    private static boolean clickedButton(Object target, HBox row) {
+        if (!(target instanceof javafx.scene.Node node)) {
+            return false;
+        }
+        while (node != null && node != row) {
+            if (node instanceof Button) {
+                return true;
+            }
+            node = node.getParent();
+        }
+        return false;
     }
 
     private void deselectCurrent() {

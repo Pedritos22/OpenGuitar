@@ -74,6 +74,7 @@ public final class SoundManager {
     private MediaPlayer lobbyOutgoingPlayer;
     private MediaPlayer overlayPlayer;
     private MediaPlayer previewPlayer;
+    private Path previewPath;
     private Timeline lobbyCrossfadeTimeline;
     private ChangeListener<Duration> lobbyCrossfadeArmListener;
     private boolean lobbyActive;
@@ -85,8 +86,8 @@ public final class SoundManager {
     private String forcedTrack;
     private boolean windowFocused = true;
 
-    private static final double PREVIEW_VOLUME_SCALE = 0.72;
-    private static final double LOBBY_DURING_PREVIEW_SCALE = 0.18;
+    private static final double PREVIEW_VOLUME_SCALE = 0.78;
+    private static final double LOBBY_DURING_PREVIEW_SCALE = 0.03;
 
     private SoundManager() {
         for (Sfx sfx : Sfx.values()) {
@@ -320,7 +321,7 @@ public final class SoundManager {
         GameLog.event(LOG, "sound", "crossfadeLobbyToNext() — next=" + nextTrack
                 + " silentOut=" + outgoingSilent);
         lastLobbyTrack = nextTrack;
-        double targetVol = lobbyVolume();
+        double targetVol = currentLobbyVolume();
 
         MediaPlayer incoming = createPlayer(nextTrack, 0);
         if (incoming == null) {
@@ -471,13 +472,19 @@ public final class SoundManager {
     }
 
     private void playSongPreviewFx(Path audioPath) {
-        stopPreview();
         if (audioPath == null || !Files.isRegularFile(audioPath)) {
             return;
         }
+        Path normalized = audioPath.toAbsolutePath().normalize();
+        if (previewPlayer != null && normalized.equals(previewPath)) {
+            return;
+        }
+        stopPreview();
+        cancelLobbyCrossfade();
         try {
-            MediaPlayer player = new MediaPlayer(new Media(audioPath.toUri().toASCIIString()));
+            MediaPlayer player = new MediaPlayer(new Media(normalized.toUri().toASCIIString()));
             previewPlayer = player;
+            previewPath = normalized;
             player.setVolume(0);
             player.setOnReady(() -> {
                 if (previewPlayer == player) {
@@ -530,9 +537,18 @@ public final class SoundManager {
 
     private void stopPreview() {
         if (previewPlayer != null) {
-            previewPlayer.stop();
-            previewPlayer.dispose();
+            MediaPlayer player = previewPlayer;
             previewPlayer = null;
+            previewPath = null;
+            player.setOnReady(null);
+            player.setOnEndOfMedia(null);
+            player.setOnError(null);
+            try {
+                player.stop();
+                player.dispose();
+            } catch (RuntimeException ex) {
+                GameLog.warn(LOG, "sound", "Nie udało się zamknąć podglądu", ex);
+            }
         }
         applyLobbyVolume();
     }
@@ -545,10 +561,7 @@ public final class SoundManager {
                 lobbyCrossfadeTimeline.pause();
             }
         }
-        double vol = effectiveVolume(lobbyVolume());
-        if (previewPlayer != null) {
-            vol *= LOBBY_DURING_PREVIEW_SCALE;
-        }
+        double vol = currentLobbyVolume();
         if (lobbyPlayer != null) {
             lobbyPlayer.setVolume(vol);
         }
@@ -564,6 +577,11 @@ public final class SoundManager {
         if (previewPlayer != null) {
             previewPlayer.setVolume(effectiveVolume(songVolume() * PREVIEW_VOLUME_SCALE));
         }
+    }
+
+    private double currentLobbyVolume() {
+        double volume = effectiveVolume(lobbyVolume());
+        return previewPlayer != null ? volume * LOBBY_DURING_PREVIEW_SCALE : volume;
     }
 
     private double effectiveVolume(double configuredVolume) {
