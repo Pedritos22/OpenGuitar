@@ -1,6 +1,7 @@
 package com.openguitar.game;
 
 import com.openguitar.game.view.PersonaFonts;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.text.Font;
 
 /**
@@ -54,6 +55,14 @@ public final class PersonaMenuTheme {
              + "-fx-background-color: transparent;"
              + "-fx-border-color: transparent;"
              + "-fx-padding: 0;";
+    }
+
+    public static void applyScrollPaneTheme(ScrollPane scrollPane) {
+        scrollPane.getStyleClass().add("persona-scroll-pane");
+        var stylesheet = PersonaMenuTheme.class.getResource("/styles/persona-menu.css");
+        if (stylesheet != null) {
+            scrollPane.getStylesheets().add(stylesheet.toExternalForm());
+        }
     }
 
     public static String divider() {

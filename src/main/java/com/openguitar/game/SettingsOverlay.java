@@ -145,6 +145,7 @@ final class SettingsOverlay {
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         scroll.setStyle(PersonaMenuTheme.scrollPane());
+        PersonaMenuTheme.applyScrollPaneTheme(scroll);
         scroll.setMinViewportHeight(0);
         double maxScrollH = GameScreen.CANVAS_HEIGHT - 210;
         scroll.setMaxHeight(maxScrollH);

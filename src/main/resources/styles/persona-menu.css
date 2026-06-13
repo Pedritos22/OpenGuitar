@@ -1,0 +1,48 @@
+.persona-scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+
+.persona-scroll-pane .scroll-bar:vertical {
+    -fx-background-color: rgba(3, 6, 13, 0.82);
+    -fx-pref-width: 12px;
+    -fx-padding: 1px;
+    -fx-border-color: #1e4a7a;
+    -fx-border-width: 0 0 0 1px;
+}
+
+.persona-scroll-pane .scroll-bar:vertical .track,
+.persona-scroll-pane .scroll-bar:vertical .track-background {
+    -fx-background-color: linear-gradient(to right, #06101f, #0a1d3a);
+    -fx-background-radius: 0;
+}
+
+.persona-scroll-pane .scroll-bar:vertical .thumb {
+    -fx-background-color: linear-gradient(to right, #0b3a6b, #00d4ff);
+    -fx-background-insets: 1px;
+    -fx-background-radius: 0;
+    -fx-border-color: #7df9ff;
+    -fx-border-width: 0 1px 0 0;
+}
+
+.persona-scroll-pane .scroll-bar:vertical .thumb:hover,
+.persona-scroll-pane .scroll-bar:vertical .thumb:pressed {
+    -fx-background-color: linear-gradient(to right, #1e4a7a, #7df9ff);
+}
+
+.persona-scroll-pane .scroll-bar .increment-button,
+.persona-scroll-pane .scroll-bar .decrement-button {
+    -fx-background-color: #081326;
+    -fx-background-radius: 0;
+    -fx-padding: 3px;
+}
+
+.persona-scroll-pane .scroll-bar .increment-arrow,
+.persona-scroll-pane .scroll-bar .decrement-arrow {
+    -fx-background-color: #00d4ff;
+    -fx-shape: "M 0 0 L 4 4 L 8 0 Z";
+    -fx-padding: 3px;
+}
+
+.persona-scroll-pane .corner {
+    -fx-background-color: #03060d;
+}

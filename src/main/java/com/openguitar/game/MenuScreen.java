@@ -284,6 +284,7 @@ public final class MenuScreen {
         songsScroll.setFitToWidth(true);
         songsScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         songsScroll.setStyle(PersonaMenuTheme.scrollPane());
+        PersonaMenuTheme.applyScrollPaneTheme(songsScroll);
         songsScroll.viewportBoundsProperty().addListener((obs, oldBounds, bounds) ->
                 songsList.setMinHeight(bounds.getHeight()));
         setupSongDropTarget(songsScroll);
@@ -894,6 +895,7 @@ public final class MenuScreen {
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scroll.setStyle(PersonaMenuTheme.scrollPane());
+        PersonaMenuTheme.applyScrollPaneTheme(scroll);
         scroll.setPrefHeight(HEIGHT * 0.5);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
