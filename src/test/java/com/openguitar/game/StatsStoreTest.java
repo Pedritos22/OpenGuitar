@@ -75,7 +75,7 @@ class StatsStoreTest {
         StatsStore.SongStat stat = new StatsStore.SongStat(1, 100, 5, 5, 4, 1, 0.8, "UNKNOWN");
         StatsStore.PlayRecord record = new StatsStore.PlayRecord(100, 5, 0, 4, 1, 5, 0.8, "BROKEN", 123L);
 
-        assertEquals(Rank.E, stat.rank());
-        assertEquals(Rank.E, record.rank());
+        assertEquals(Rank.F, stat.rank());
+        assertEquals(Rank.F, record.rank());
     }
 }
