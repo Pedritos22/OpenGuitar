@@ -185,6 +185,13 @@ public final class PersonaMenuTheme {
              + "-fx-padding: 24 16 24 16;";
     }
 
+    /** Podświetlenie strefy drop podczas przeciągania plików audio. */
+    public static String dropZoneActive() {
+        return "-fx-background-color: rgba(0, 212, 255, 0.08);"
+             + "-fx-border-color: " + ACCENT + " " + BORDER + " " + BORDER + " " + ACCENT + ";"
+             + "-fx-border-width: 2 1 1 3;";
+    }
+
     /** Panel nakładki z historią podejść. */
     public static String historyPanel() {
         return "-fx-background-color: linear-gradient(to bottom, #0a1d3a, #050b16);"
