@@ -16,7 +16,7 @@ import javafx.scene.paint.Color;
  *   B  — celność ≥ 0.78                            turkus
  *   C  — celność ≥ 0.65                            błękit
  *   D  — celność ≥ 0.50                            stalowy
- *   E  — poniżej                                   czerwień
+ *   F  — poniżej                                   czerwień
  * </pre>
  */
 public enum Rank {
@@ -25,7 +25,7 @@ public enum Rank {
     B("#19e3d0"),
     C("#2f7dff"),
     D("#5d7da3"),
-    E("#ff5d73");
+    F("#ff5d73");
 
     /** Waga trafienia GREAT przy liczeniu celności (PERFECT = 1.0). */
     public static final double GREAT_WEIGHT = 0.6;
@@ -54,7 +54,7 @@ public enum Rank {
     /** Wylicza rangę dla gotowego wyniku. */
     public static Rank of(GameResult r) {
         if (r == null || r.totalNotes() == 0) {
-            return E;
+            return F;
         }
         double acc = r.accuracy();
         if (acc >= 0.95 || (r.fullCombo() && acc >= 0.90)) {
@@ -72,7 +72,7 @@ public enum Rank {
         if (acc >= 0.50) {
             return D;
         }
-        return E;
+        return F;
     }
 
     /** Ranga z zapisanej celności (np. odtworzona z bazy) — bez pełnego {@link GameResult}. */
@@ -92,6 +92,6 @@ public enum Rank {
         if (acc >= 0.50) {
             return D;
         }
-        return E;
+        return F;
     }
 }

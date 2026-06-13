@@ -97,7 +97,7 @@ public final class StatsStore {
         try {
             return Rank.valueOf(name);
         } catch (IllegalArgumentException | NullPointerException ex) {
-            return Rank.E;
+            return Rank.F;
         }
     }
 
