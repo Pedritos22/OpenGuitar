@@ -90,9 +90,11 @@ class GameSettingsTest {
         s.setGameplayHitSfx(false);
         s.setUiSfxVolume(55);
         s.setReactionTimePreset(0);
+        s.setReactionTimeMs(1_850);
         s.setShowComboPopups(false);
         s.setCountdownOnResume(false);
         s.setFullscreenOnStart(true);
+        s.setMuteWhenUnfocused(false);
         s.setLocaleTag("en");
         s.setLaneKey(2, KeyCode.SPACE);
         s.save();
@@ -106,11 +108,11 @@ class GameSettingsTest {
         assertEquals(70, loaded.songMusicVolume());
         assertFalse(loaded.gameplayHitSfx());
         assertEquals(55, loaded.uiSfxVolume());
-        assertEquals(0, loaded.reactionTimePreset());
-        assertEquals(GameSettings.REACTION_TIME_MS[0], loaded.noteLookAheadMs());
+        assertEquals(1_850, loaded.noteLookAheadMs());
         assertFalse(loaded.showComboPopups());
         assertFalse(loaded.countdownOnResume());
         assertTrue(loaded.fullscreenOnStart());
+        assertFalse(loaded.muteWhenUnfocused());
         assertEquals("en", loaded.localeTag());
         assertEquals(KeyCode.SPACE, loaded.laneKey(2));
     }
@@ -183,18 +185,19 @@ class GameSettingsTest {
     }
 
     @Test
-    void reactionTimePresetShouldClampAndCycle() {
+    void reactionTimeShouldClampAndPreserveExactMilliseconds() {
         GameSettings s = GameSettings.get();
-        s.setReactionTimePreset(99);
-        assertEquals(GameSettings.REACTION_TIME_MS.length - 1, s.reactionTimePreset());
-        assertEquals("1.2 s", s.reactionTimeLabel());
+        s.setReactionTimeMs(9_999);
+        assertEquals(2_200, s.noteLookAheadMs());
+        assertEquals("2.20 s", s.reactionTimeLabel());
 
-        s.adjustReactionTimePreset(-1);
-        assertEquals("1.7 s", s.reactionTimeLabel());
-        s.adjustReactionTimePreset(-1);
-        assertEquals("2.2 s", s.reactionTimeLabel());
-        s.adjustReactionTimePreset(-1);
-        assertEquals("2.2 s", s.reactionTimeLabel());
+        s.setReactionTimeMs(1_873);
+        assertEquals(1_873, s.noteLookAheadMs());
+        assertEquals("1.87 s", s.reactionTimeLabel());
+
+        s.setReactionTimeMs(1);
+        assertEquals(50, s.noteLookAheadMs());
+        assertEquals("0.05 s", s.reactionTimeLabel());
     }
 
     @Test
@@ -204,7 +207,7 @@ class GameSettingsTest {
         GameSettings.resetForTests(props);
         GameSettings s = GameSettings.get();
         assertEquals(0, s.reactionTimePreset());
-        assertEquals("2.2 s", s.reactionTimeLabel());
+        assertEquals("2.20 s", s.reactionTimeLabel());
     }
 
     @Test

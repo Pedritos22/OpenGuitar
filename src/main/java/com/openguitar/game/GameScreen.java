@@ -331,10 +331,10 @@ public final class GameScreen {
                     GameLog.fine(LOG, "game", "onReady() — ignoruję (stary token/player)");
                     return;
                 }
-                created.setVolume(SoundManager.songVolume());
+                created.setVolume(effectiveSongVolume());
                 GameLog.event(LOG, "game", "onReady() — token=" + token + " duration="
                         + (int) created.getTotalDuration().toMillis() + "ms vol="
-                        + String.format("%.2f", SoundManager.songVolume()));
+                        + String.format("%.2f", effectiveSongVolume()));
             });
             created.setOnEndOfMedia(() -> {
                 if (token == playbackToken) {
@@ -403,7 +403,7 @@ public final class GameScreen {
             return;
         }
         try {
-            player.setVolume(SoundManager.songVolume());
+            player.setVolume(effectiveSongVolume());
             double at = Math.max(0, pauseMediaTimeMs > 0 ? pauseMediaTimeMs : currentTimeMs);
             player.seek(Duration.millis(at));
             player.play();
@@ -416,6 +416,17 @@ public final class GameScreen {
         } catch (Exception ex) {
             GameLog.warn(LOG, "game", "startPlayback() — błąd play/seek", ex);
         }
+    }
+
+    public void setWindowFocused(boolean focused) {
+        if (player != null) {
+            player.setVolume((focused || !GameSettings.get().muteWhenUnfocused())
+                    ? SoundManager.songVolume() : 0.0);
+        }
+    }
+
+    private double effectiveSongVolume() {
+        return SoundManager.get().isAudible() ? SoundManager.songVolume() : 0.0;
     }
 
     private void onMediaPlayerError() {

@@ -8,6 +8,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Slider;
+import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.ColumnConstraints;
@@ -34,12 +35,14 @@ final class SettingsOverlay {
     /** Ścieżka oczekująca na przypisanie klawisza (-1 = brak rebindingu). */
     private int rebindingLane = -1;
     private Label countdownValue;
-    private Label reactionTimeValue;
+    private TextField reactionTimeValue;
+    private Slider reactionTimeSlider;
     private Button popupsToggle;
     private Button comboPopupsToggle;
     private Button countdownResumeToggle;
     private Button fullscreenToggle;
     private Button hitSfxToggle;
+    private Button muteUnfocusedToggle;
     private Label languageValue;
 
     private Runnable onLocaleChanged;
@@ -124,7 +127,8 @@ final class SettingsOverlay {
                         lobbyVolumeRow(),
                         songVolumeRow(),
                         uiSfxVolumeRow(),
-                        hitSfxRow()),
+                        hitSfxRow(),
+                        muteUnfocusedRow()),
                 sectionBlock(I18n.get("settings.section.gameplay"),
                         reactionTimeRow(),
                         countdownRow(),
@@ -382,7 +386,7 @@ final class SettingsOverlay {
         countdownValue.setText(sec <= 0 ? I18n.get("settings.disabled") : I18n.format("settings.seconds", sec));
     }
 
-    private HBox reactionTimeRow() {
+    private VBox reactionTimeRow() {
         Label name = new Label(I18n.get("settings.reaction"));
         name.setFont(PersonaMenuTheme.labelFont(11));
         name.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
@@ -390,36 +394,69 @@ final class SettingsOverlay {
         name.setMinWidth(0);
         name.setMaxWidth(Double.MAX_VALUE);
 
-        reactionTimeValue = new Label();
+        reactionTimeValue = new TextField();
         reactionTimeValue.setFont(PersonaMenuTheme.labelFont(11));
-        reactionTimeValue.setTextFill(Color.web(PersonaMenuTheme.ACCENT_GLOW));
-        reactionTimeValue.setMinWidth(52);
-        reactionTimeValue.setAlignment(Pos.CENTER);
+        reactionTimeValue.setStyle(PersonaMenuTheme.reactionTimeField());
+        reactionTimeValue.setMinWidth(72);
+        reactionTimeValue.setPrefWidth(72);
+        reactionTimeValue.setMaxWidth(72);
+        reactionTimeValue.setAlignment(Pos.CENTER_RIGHT);
+        reactionTimeValue.setPromptText("0.05");
+        reactionTimeValue.setOnAction(e -> commitReactionTimeValue());
+        reactionTimeValue.focusedProperty().addListener((obs, wasFocused, focused) -> {
+            if (!focused) {
+                commitReactionTimeValue();
+            }
+        });
         updateReactionTimeValue();
 
-        Button minus = stepper("\u2212");
-        minus.setOnAction(e -> changeReactionTime(-1));
-        Button plus = stepper("+");
-        plus.setOnAction(e -> changeReactionTime(1));
+        Slider slider = new Slider(GameSettings.REACTION_TIME_MIN_MS,
+                GameSettings.REACTION_TIME_MAX_MS, GameSettings.get().noteLookAheadMs());
+        reactionTimeSlider = slider;
+        slider.setBlockIncrement(GameSettings.REACTION_TIME_STEP_MS);
+        slider.setMajorTickUnit(200);
+        slider.setMinorTickCount(3);
+        slider.setSnapToTicks(false);
+        slider.setStyle(PersonaMenuTheme.volumeSlider());
+        slider.setMaxWidth(Double.MAX_VALUE);
+        slider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            GameSettings.get().setReactionTimeMs(newVal.intValue());
+            if (!reactionTimeValue.isFocused()) {
+                updateReactionTimeValue();
+            }
+        });
+        slider.setOnMouseReleased(e -> SoundManager.get().play(SoundManager.Sfx.NAV));
 
-        HBox controls = new HBox(4, minus, reactionTimeValue, plus);
-        controls.setAlignment(Pos.CENTER_RIGHT);
+        HBox header = new HBox(8, name, reactionTimeValue);
+        header.setAlignment(Pos.CENTER_LEFT);
 
-        HBox row = new HBox(8, name, controls);
-        row.setAlignment(Pos.CENTER_LEFT);
+        VBox row = new VBox(3, header, slider);
+        row.setFillWidth(true);
         row.setStyle(PersonaMenuTheme.settingRowCompact());
         return row;
     }
 
-    private void changeReactionTime(int delta) {
-        GameSettings s = GameSettings.get();
-        s.adjustReactionTimePreset(delta);
-        updateReactionTimeValue();
-        SoundManager.get().play(SoundManager.Sfx.NAV);
+    private void updateReactionTimeValue() {
+        reactionTimeValue.setText(String.format(java.util.Locale.ROOT, "%.3f",
+                GameSettings.get().noteLookAheadMs() / 1000.0));
     }
 
-    private void updateReactionTimeValue() {
-        reactionTimeValue.setText(GameSettings.get().reactionTimeLabel());
+    private void commitReactionTimeValue() {
+        String raw = reactionTimeValue.getText().trim().replace(',', '.');
+        try {
+            double seconds = Double.parseDouble(raw);
+            if (!Double.isFinite(seconds)) {
+                throw new NumberFormatException(raw);
+            }
+            GameSettings.get().setReactionTimeMs((int) Math.round(seconds * 1000.0));
+            if (reactionTimeSlider != null) {
+                reactionTimeSlider.setValue(GameSettings.get().noteLookAheadMs());
+            }
+            SoundManager.get().play(SoundManager.Sfx.NAV);
+        } catch (NumberFormatException ex) {
+            // Przy błędnym wpisie wracamy do ostatniej poprawnej wartości.
+        }
+        updateReactionTimeValue();
     }
 
     private HBox countdownResumeRow() {
@@ -430,6 +467,21 @@ final class SettingsOverlay {
         });
         updateCountdownResumeToggle();
         return row;
+    }
+
+    private HBox muteUnfocusedRow() {
+        HBox row = toggleRow(I18n.get("settings.mute_unfocused"), b -> muteUnfocusedToggle = b, () -> {
+            GameSettings s = GameSettings.get();
+            s.setMuteWhenUnfocused(!s.muteWhenUnfocused());
+            updateMuteUnfocusedToggle();
+            SoundManager.get().refreshLobbyVolume();
+        });
+        updateMuteUnfocusedToggle();
+        return row;
+    }
+
+    private void updateMuteUnfocusedToggle() {
+        setToggleText(muteUnfocusedToggle, GameSettings.get().muteWhenUnfocused());
     }
 
     private void updateCountdownResumeToggle() {

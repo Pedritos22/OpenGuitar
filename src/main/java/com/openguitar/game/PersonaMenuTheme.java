@@ -300,6 +300,20 @@ public final class PersonaMenuTheme {
              + "-fx-control-inner-background: " + BG_PANEL + ";";
     }
 
+    public static String reactionTimeField() {
+        return "-fx-background-color: rgba(0, 212, 255, 0.04);"
+             + "-fx-text-fill: " + ACCENT_GLOW + ";"
+             + "-fx-prompt-text-fill: " + TEXT_DIM + ";"
+             + "-fx-font-family: " + UI + ";"
+             + "-fx-font-size: 11px;"
+             + "-fx-font-weight: bold;"
+             + "-fx-padding: 3 6 3 6;"
+             + "-fx-background-radius: 0;"
+             + "-fx-border-color: " + BORDER + ";"
+             + "-fx-border-width: 1;"
+             + "-fx-border-radius: 0;";
+    }
+
     /** Przycisk z ikoną zębatki (font systemowy, by glif na pewno się renderował). */
     public static String gearButton() {
         return "-fx-background-color: rgba(0, 212, 255, 0.06);"

@@ -12,6 +12,8 @@ import javafx.scene.media.MediaPlayer;
 import javafx.util.Duration;
 
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
@@ -71,6 +73,7 @@ public final class SoundManager {
     private MediaPlayer lobbyPlayer;
     private MediaPlayer lobbyOutgoingPlayer;
     private MediaPlayer overlayPlayer;
+    private MediaPlayer previewPlayer;
     private Timeline lobbyCrossfadeTimeline;
     private ChangeListener<Duration> lobbyCrossfadeArmListener;
     private boolean lobbyActive;
@@ -80,6 +83,10 @@ public final class SoundManager {
     private String lastLobbyTrack;
     /** Utwór menu wymuszony przez ekran; {@code null} = losowa rotacja. */
     private String forcedTrack;
+    private boolean windowFocused = true;
+
+    private static final double PREVIEW_VOLUME_SCALE = 0.72;
+    private static final double LOBBY_DURING_PREVIEW_SCALE = 0.18;
 
     private SoundManager() {
         for (Sfx sfx : Sfx.values()) {
@@ -97,7 +104,7 @@ public final class SoundManager {
     /** Odtwarza krótki efekt (bezpieczne z dowolnego wątku). */
     public void play(Sfx sfx) {
         GameLog.fine(LOG, "sound", "play(SFX) " + sfx.name());
-        playClip(sfx, GameSettings.get().uiSfxVolumeScale());
+        playClip(sfx, effectiveVolume(GameSettings.get().uiSfxVolumeScale()));
     }
 
     /**
@@ -113,7 +120,31 @@ public final class SoundManager {
 
     /** Stosuje bieżącą głośność lobby do aktywnych odtwarzaczy menu/wyników. */
     public void refreshLobbyVolume() {
-        runFx(this::applyLobbyVolume);
+        runFx(() -> {
+            applyLobbyVolume();
+            applyPreviewVolume();
+        });
+    }
+
+    public void setWindowFocused(boolean focused) {
+        runFx(() -> {
+            windowFocused = focused;
+            applyLobbyVolume();
+            applyPreviewVolume();
+        });
+    }
+
+    public boolean isAudible() {
+        return windowFocused || !GameSettings.get().muteWhenUnfocused();
+    }
+
+    /** Odtwarza wybrany utwór w menu i zostawia muzykę lobby cicho w tle. */
+    public void playSongPreview(Path audioPath) {
+        runFx(() -> playSongPreviewFx(audioPath));
+    }
+
+    public void stopSongPreview() {
+        runFx(this::stopPreview);
     }
 
     private void playClip(Sfx sfx, double volume) {
@@ -152,6 +183,7 @@ public final class SoundManager {
             resultsActive = false;
             cancelLobbyCrossfade();
             stopOverlay();
+            stopPreview();
             stopLobbyInternal(false);
             GameLog.event(LOG, "sound", "enterGameplay() — gotowe");
         });
@@ -171,6 +203,7 @@ public final class SoundManager {
             resultsActive = false;
             cancelLobbyCrossfade();
             stopOverlay();
+            stopPreview();
             stopLobbyInternal(false);
         });
     }
@@ -192,6 +225,7 @@ public final class SoundManager {
         forcedTrack = track;
         resultsActive = false;
         stopOverlay();
+        stopPreview();
 
         if (lobbyActive && track.equals(lastLobbyTrack) && lobbyPlayer != null) {
             GameLog.fine(LOG, "sound", "switchScreenMusic() — utwór już gra, pomijam");
@@ -391,6 +425,7 @@ public final class SoundManager {
         resultsActive = true;
         stopLobbyInternal();
         stopOverlay();
+        stopPreview();
 
         overlayPlayer = createPlayer("/sound/song_ending.mp3", lobbyVolume());
         if (overlayPlayer == null) {
@@ -435,6 +470,39 @@ public final class SoundManager {
         }
     }
 
+    private void playSongPreviewFx(Path audioPath) {
+        stopPreview();
+        if (audioPath == null || !Files.isRegularFile(audioPath)) {
+            return;
+        }
+        try {
+            MediaPlayer player = new MediaPlayer(new Media(audioPath.toUri().toASCIIString()));
+            previewPlayer = player;
+            player.setVolume(0);
+            player.setOnReady(() -> {
+                if (previewPlayer == player) {
+                    applyLobbyVolume();
+                    applyPreviewVolume();
+                    player.play();
+                }
+            });
+            player.setOnEndOfMedia(() -> {
+                if (previewPlayer == player) {
+                    stopPreview();
+                }
+            });
+            player.setOnError(() -> {
+                if (previewPlayer == player) {
+                    stopPreview();
+                }
+            });
+            applyLobbyVolume();
+        } catch (Exception ex) {
+            GameLog.warn(LOG, "sound", "Nie udało się uruchomić podglądu " + audioPath, ex);
+            stopPreview();
+        }
+    }
+
     private void stopLobbyInternal() {
         stopLobbyInternal(true);
     }
@@ -460,8 +528,27 @@ public final class SoundManager {
         }
     }
 
+    private void stopPreview() {
+        if (previewPlayer != null) {
+            previewPlayer.stop();
+            previewPlayer.dispose();
+            previewPlayer = null;
+        }
+        applyLobbyVolume();
+    }
+
     private void applyLobbyVolume() {
-        double vol = lobbyVolume();
+        if (lobbyCrossfadeTimeline != null) {
+            if (isAudible()) {
+                lobbyCrossfadeTimeline.play();
+            } else {
+                lobbyCrossfadeTimeline.pause();
+            }
+        }
+        double vol = effectiveVolume(lobbyVolume());
+        if (previewPlayer != null) {
+            vol *= LOBBY_DURING_PREVIEW_SCALE;
+        }
         if (lobbyPlayer != null) {
             lobbyPlayer.setVolume(vol);
         }
@@ -471,6 +558,16 @@ public final class SoundManager {
         if (overlayPlayer != null && resultsActive) {
             overlayPlayer.setVolume(vol);
         }
+    }
+
+    private void applyPreviewVolume() {
+        if (previewPlayer != null) {
+            previewPlayer.setVolume(effectiveVolume(songVolume() * PREVIEW_VOLUME_SCALE));
+        }
+    }
+
+    private double effectiveVolume(double configuredVolume) {
+        return isAudible() ? configuredVolume : 0.0;
     }
 
     /** Głośność muzyki menu (0.0–1.0) — bezpośrednio ze suwaka użytkownika. */
