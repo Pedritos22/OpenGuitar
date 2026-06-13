@@ -3,7 +3,7 @@
 [![Java](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Maven](https://img.shields.io/badge/Maven-3.9+-C71A36?logo=apachemaven&logoColor=white)](https://maven.apache.org/)
 [![JavaFX](https://img.shields.io/badge/JavaFX-21-FF6A00?logo=java&logoColor=white)](https://openjfx.io/)
-[![Tests](https://img.shields.io/badge/Tests-100-25A162?logo=junit5&logoColor=white)](DOCUMENTATION.md#12-tests)
+[![Tests](https://img.shields.io/badge/Tests-103-25A162?logo=junit5&logoColor=white)](DOCUMENTATION.md#12-tests)
 [![GitHub](https://img.shields.io/badge/GitHub-OpenGuitar-181717?logo=github)](https://github.com/Pedritos22/OpenGuitar)
 
 A desktop rhythm game in the style of Guitar Hero. Drop your music into a folder, hit the notes in time, and chase high scores and S-ranks.
