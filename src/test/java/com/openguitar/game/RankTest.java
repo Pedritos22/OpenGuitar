@@ -13,7 +13,7 @@ class RankTest {
         assertEquals(Rank.B, Rank.of(result(78, 0, 22)));
         assertEquals(Rank.C, Rank.of(result(65, 0, 35)));
         assertEquals(Rank.D, Rank.of(result(50, 0, 50)));
-        assertEquals(Rank.E, Rank.of(result(40, 0, 60)));
+        assertEquals(Rank.F, Rank.of(result(40, 0, 60)));
     }
 
     @Test
@@ -23,16 +23,16 @@ class RankTest {
     }
 
     @Test
-    void nullOrEmptyResultShouldBeRankE() {
-        assertEquals(Rank.E, Rank.of(null));
-        assertEquals(Rank.E, Rank.of(new GameResult("x", 0, 0, 0, 0, 0, 0)));
+    void nullOrEmptyResultShouldBeRankF() {
+        assertEquals(Rank.F, Rank.of(null));
+        assertEquals(Rank.F, Rank.of(new GameResult("x", 0, 0, 0, 0, 0, 0)));
     }
 
     @Test
     void fromAccuracyShouldMirrorOfLogic() {
         assertEquals(Rank.S, Rank.fromAccuracy(0.95, false));
         assertEquals(Rank.S, Rank.fromAccuracy(0.90, true));
-        assertEquals(Rank.E, Rank.fromAccuracy(0.10, false));
+        assertEquals(Rank.F, Rank.fromAccuracy(0.10, false));
     }
 
     @Test

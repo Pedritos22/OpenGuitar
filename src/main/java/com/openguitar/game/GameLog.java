@@ -1,7 +1,5 @@
 package com.openguitar.game;
 
-import javafx.application.Platform;
-
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -45,6 +43,6 @@ public final class GameLog {
     }
 
     private static String threadTag() {
-        return Platform.isFxApplicationThread() ? "FX" : "BG";
+        return "JavaFX Application Thread".equals(Thread.currentThread().getName()) ? "FX" : "BG";
     }
 }

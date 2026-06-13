@@ -34,7 +34,12 @@ public final class GameSettings {
     public static final int VOLUME_MIN = 0;
     public static final int VOLUME_MAX = 100;
 
-    /** Czas pojawiania się nut przed hit-line (ms) — dłuższy = więcej czasu na reakcję. */
+    /** Zakres czasu pojawiania się nut przed hit-line (ms). */
+    public static final int REACTION_TIME_MIN_MS = 50;
+    public static final int REACTION_TIME_MAX_MS = 2_200;
+    public static final int REACTION_TIME_STEP_MS = 50;
+    public static final int REACTION_TIME_DEFAULT_MS = 1_650;
+    /** Stare presety pozostają wyłącznie do migracji wcześniejszych ustawień. */
     public static final int[] REACTION_TIME_MS = {2_200, 1_650, 1_200};
     public static final int REACTION_TIME_DEFAULT = 1;
 
@@ -59,14 +64,16 @@ public final class GameSettings {
     private boolean gameplayHitSfx = true;
     /** Głośność krótkich efektów UI (kliknięcia menu, nawigacja). */
     private int uiSfxVolume = 72;
-    /** Indeks presetu czasu na reakcję ({@link #REACTION_TIME_MS}). */
-    private int reactionTimePreset = REACTION_TIME_DEFAULT;
+    /** Dokładny czas na reakcję w ms. */
+    private int reactionTimeMs = REACTION_TIME_DEFAULT_MS;
     /** Komunikaty combo, mnożnika i zerwania combo nad torami. */
     private boolean showComboPopups = true;
     /** Odliczanie po wznowieniu z pauzy (gdy countdown &gt; 0). */
     private boolean countdownOnResume = true;
     /** Uruchom grę w trybie pełnoekranowym. */
     private boolean fullscreenOnStart = false;
+    /** Wycisz całą aplikację, gdy jej okno nie ma fokusu. */
+    private boolean muteWhenUnfocused = true;
     /** Tag języka UI (BCP 47), np. {@code pl} lub {@code en}. */
     private String localeTag = LOCALE_DEFAULT;
 
@@ -126,19 +133,25 @@ public final class GameSettings {
     }
 
     public int reactionTimePreset() {
-        return reactionTimePreset;
+        int closest = 0;
+        for (int i = 1; i < REACTION_TIME_MS.length; i++) {
+            if (Math.abs(REACTION_TIME_MS[i] - reactionTimeMs)
+                    < Math.abs(REACTION_TIME_MS[closest] - reactionTimeMs)) {
+                closest = i;
+            }
+        }
+        return closest;
     }
 
     /** Czas pojawiania się nut w ms przed hit-line (z presetu czasu na reakcję). */
     public int noteLookAheadMs() {
-        return REACTION_TIME_MS[reactionTimePreset];
+        return reactionTimeMs;
     }
 
     /** Etykieta czasu pojawiania się nut, np. {@code "2.2 s"}. */
     public String reactionTimeLabel() {
-        int ms = REACTION_TIME_MS[reactionTimePreset];
         return I18n.format("settings.seconds",
-                String.format(Locale.ROOT, "%.1f", ms / 1000.0));
+                String.format(Locale.ROOT, "%.2f", reactionTimeMs / 1000.0));
     }
 
     public boolean showComboPopups() {
@@ -151,6 +164,10 @@ public final class GameSettings {
 
     public boolean fullscreenOnStart() {
         return fullscreenOnStart;
+    }
+
+    public boolean muteWhenUnfocused() {
+        return muteWhenUnfocused;
     }
 
     public String localeTag() {
@@ -222,11 +239,16 @@ public final class GameSettings {
     }
 
     public void setReactionTimePreset(int preset) {
-        reactionTimePreset = Math.max(0, Math.min(REACTION_TIME_MS.length - 1, preset));
+        int clamped = Math.max(0, Math.min(REACTION_TIME_MS.length - 1, preset));
+        setReactionTimeMs(REACTION_TIME_MS[clamped]);
     }
 
     public void adjustReactionTimePreset(int delta) {
-        setReactionTimePreset(reactionTimePreset + delta);
+        setReactionTimePreset(reactionTimePreset() + delta);
+    }
+
+    public void setReactionTimeMs(int milliseconds) {
+        reactionTimeMs = Math.max(REACTION_TIME_MIN_MS, Math.min(REACTION_TIME_MAX_MS, milliseconds));
     }
 
     public void setShowComboPopups(boolean show) {
@@ -239,6 +261,10 @@ public final class GameSettings {
 
     public void setFullscreenOnStart(boolean enabled) {
         fullscreenOnStart = enabled;
+    }
+
+    public void setMuteWhenUnfocused(boolean enabled) {
+        muteWhenUnfocused = enabled;
     }
 
     public void setLocaleTag(String tag) {
@@ -317,18 +343,26 @@ public final class GameSettings {
                 p.getProperty("audio.gameplay.sfx", Boolean.toString(gameplayHitSfx)));
         uiSfxVolume = parseInt(p.getProperty("audio.ui.sfx.volume"), uiSfxVolume,
                 VOLUME_MIN, VOLUME_MAX);
-        String reactionRaw = p.getProperty("gameplay.reaction.time");
-        if (reactionRaw == null) {
-            reactionRaw = p.getProperty("gameplay.note.speed");
+        String reactionMsRaw = p.getProperty("gameplay.reaction.time.ms");
+        if (reactionMsRaw != null) {
+            setReactionTimeMs(parseInt(reactionMsRaw, reactionTimeMs,
+                    REACTION_TIME_MIN_MS, REACTION_TIME_MAX_MS));
+        } else {
+            String legacyPreset = p.getProperty("gameplay.reaction.time");
+            if (legacyPreset == null) {
+                legacyPreset = p.getProperty("gameplay.note.speed");
+            }
+            setReactionTimePreset(parseInt(legacyPreset, REACTION_TIME_DEFAULT,
+                    0, REACTION_TIME_MS.length - 1));
         }
-        reactionTimePreset = parseInt(reactionRaw, reactionTimePreset,
-                0, REACTION_TIME_MS.length - 1);
         showComboPopups = Boolean.parseBoolean(
                 p.getProperty("popups.combo", Boolean.toString(showComboPopups)));
         countdownOnResume = Boolean.parseBoolean(
                 p.getProperty("gameplay.countdown.resume", Boolean.toString(countdownOnResume)));
         fullscreenOnStart = Boolean.parseBoolean(
                 p.getProperty("display.fullscreen.start", Boolean.toString(fullscreenOnStart)));
+        muteWhenUnfocused = Boolean.parseBoolean(
+                p.getProperty("audio.mute.unfocused", Boolean.toString(muteWhenUnfocused)));
         setLocaleTag(p.getProperty("display.locale", localeTag));
         dedupeKeys();
     }
@@ -345,10 +379,11 @@ public final class GameSettings {
         p.setProperty("audio.song.volume", Integer.toString(songMusicVolume));
         p.setProperty("audio.gameplay.sfx", Boolean.toString(gameplayHitSfx));
         p.setProperty("audio.ui.sfx.volume", Integer.toString(uiSfxVolume));
-        p.setProperty("gameplay.reaction.time", Integer.toString(reactionTimePreset));
+        p.setProperty("gameplay.reaction.time.ms", Integer.toString(reactionTimeMs));
         p.setProperty("popups.combo", Boolean.toString(showComboPopups));
         p.setProperty("gameplay.countdown.resume", Boolean.toString(countdownOnResume));
         p.setProperty("display.fullscreen.start", Boolean.toString(fullscreenOnStart));
+        p.setProperty("audio.mute.unfocused", Boolean.toString(muteWhenUnfocused));
         p.setProperty("display.locale", localeTag);
         try (OutputStream out = Files.newOutputStream(storageFile)) {
             p.store(out, "OpenGuitar — ustawienia użytkownika");

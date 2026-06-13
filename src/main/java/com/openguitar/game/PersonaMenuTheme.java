@@ -1,6 +1,7 @@
 package com.openguitar.game;
 
 import com.openguitar.game.view.PersonaFonts;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.text.Font;
 
 /**
@@ -54,6 +55,14 @@ public final class PersonaMenuTheme {
              + "-fx-background-color: transparent;"
              + "-fx-border-color: transparent;"
              + "-fx-padding: 0;";
+    }
+
+    public static void applyScrollPaneTheme(ScrollPane scrollPane) {
+        scrollPane.getStyleClass().add("persona-scroll-pane");
+        var stylesheet = PersonaMenuTheme.class.getResource("/styles/persona-menu.css");
+        if (stylesheet != null) {
+            scrollPane.getStylesheets().add(stylesheet.toExternalForm());
+        }
     }
 
     public static String divider() {
@@ -298,6 +307,20 @@ public final class PersonaMenuTheme {
              + "-fx-background-color: transparent;"
              + "-fx-padding: 0;"
              + "-fx-control-inner-background: " + BG_PANEL + ";";
+    }
+
+    public static String reactionTimeField() {
+        return "-fx-background-color: rgba(0, 212, 255, 0.04);"
+             + "-fx-text-fill: " + ACCENT_GLOW + ";"
+             + "-fx-prompt-text-fill: " + TEXT_DIM + ";"
+             + "-fx-font-family: " + UI + ";"
+             + "-fx-font-size: 11px;"
+             + "-fx-font-weight: bold;"
+             + "-fx-padding: 3 6 3 6;"
+             + "-fx-background-radius: 0;"
+             + "-fx-border-color: " + BORDER + ";"
+             + "-fx-border-width: 1;"
+             + "-fx-border-radius: 0;";
     }
 
     /** Przycisk z ikoną zębatki (font systemowy, by glif na pewno się renderował). */

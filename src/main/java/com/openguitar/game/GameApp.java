@@ -66,6 +66,12 @@ public class GameApp extends Application {
             e.consume();
             shutdownApplication();
         });
+        stage.focusedProperty().addListener((obs, wasFocused, focused) -> {
+            SoundManager.get().setWindowFocused(focused);
+            if (activeGame != null) {
+                activeGame.setWindowFocused(focused);
+            }
+        });
 
         SongContext fromArgs = loadFromArgs(getParameters().getRaw());
         if (fromArgs != null) {
@@ -140,6 +146,7 @@ public class GameApp extends Application {
         SoundManager.get().enterGameplay();
         GameScreen screen = new GameScreen(context, this::onSongFinished, this::launchMenu);
         activeGame = screen;
+        screen.setWindowFocused(stage.isFocused());
         showScene(screen.getScene(), "OpenGuitar - " + context.title());
         screen.start();
         GameLog.event(LOG, "app", "launchGame() — GameScreen.start() wywołane");
