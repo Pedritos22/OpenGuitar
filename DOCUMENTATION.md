@@ -408,6 +408,7 @@ audio.lobby.volume=100
 audio.song.volume=100
 audio.ui.sfx.volume=72
 audio.gameplay.sfx=true
+gameplay.note.offset.ms=0
 gameplay.reaction.time=1
 gameplay.countdown.resume=true
 display.fullscreen.start=false
@@ -424,6 +425,7 @@ display.locale=pl
 | `audio.song.volume` | 100 | In-game song volume (0–100) |
 | `audio.ui.sfx.volume` | 72 | Menu UI SFX volume (click, navigation) |
 | `audio.gameplay.sfx` | true | Hit sounds (PERFECT/GREAT/MISS/combo) |
+| `gameplay.note.offset.ms` | 0 | Note timing offset (-500..500 ms); positive values delay notes for delayed audio output |
 | `gameplay.reaction.time` | 1 | Reaction-time preset (0–2 → 2200/1650/1200 ms) |
 | `gameplay.note.speed` | — | Legacy — mapped to `gameplay.reaction.time` |
 | `gameplay.countdown.resume` | true | Countdown when resuming from pause (when countdown > 0) |
