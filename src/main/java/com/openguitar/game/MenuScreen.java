@@ -12,6 +12,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextField;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -90,8 +91,10 @@ public final class MenuScreen {
     private Button historyButton;
     private Button refreshButton;
     private Button backButton;
+    private TextField searchField;
     private ScrollPane songsScroll;
     private boolean dropZoneHighlighted;
+    private List<SongEntry> songEntries = List.of();
 
     public MenuScreen(Path songsDir, Consumer<SongContext> onSongSelected, Runnable onExit,
                       StatsStore stats) {
@@ -215,6 +218,9 @@ public final class MenuScreen {
         if (songsCaptionLabel != null) {
             songsCaptionLabel.setText(I18n.get("menu.songs.caption"));
         }
+        if (searchField != null) {
+            searchField.setPromptText(I18n.get("menu.search"));
+        }
         if (historyButton != null) {
             historyButton.setText(I18n.get("menu.history"));
         }
@@ -276,9 +282,17 @@ public final class MenuScreen {
     }
 
     private VBox buildListArea() {
-        songsCaptionLabel = new Label(I18n.get("menu.songs.caption"));
-        songsCaptionLabel.setStyle(PersonaMenuTheme.sectionLabel());
-        Label caption = songsCaptionLabel;
+        searchField = new TextField();
+        searchField.setPromptText(I18n.get("menu.search"));
+        searchField.setFont(PersonaMenuTheme.labelFont(11));
+        searchField.setStyle(PersonaMenuTheme.reactionTimeField());
+        searchField.setMinWidth(220);
+        searchField.setPrefWidth(300);
+        searchField.setMaxWidth(360);
+        searchField.textProperty().addListener((obs, oldText, newText) -> renderSongEntries());
+
+        HBox top = new HBox(searchField);
+        top.setAlignment(Pos.CENTER);
 
         songsScroll = new ScrollPane(songsList);
         songsScroll.setFitToWidth(true);
@@ -291,7 +305,7 @@ public final class MenuScreen {
         setupSongDropTarget(songsList);
         VBox.setVgrow(songsScroll, Priority.ALWAYS);
 
-        VBox block = new VBox(10, caption, songsScroll);
+        VBox block = new VBox(10, top, songsScroll);
         VBox.setVgrow(block, Priority.ALWAYS);
         return block;
     }
@@ -509,35 +523,72 @@ public final class MenuScreen {
         selectedIndex = -1;
         resetStatsPanel();
         try {
-            List<SongEntry> entries = new SongLibrary(songsDir).scan();
-            if (entries.isEmpty()) {
-                Label empty = new Label(I18n.get("menu.empty"));
-                empty.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
-                empty.setFont(PersonaMenuTheme.bodyFont(12));
-                empty.setWrapText(true);
-                empty.setStyle(PersonaMenuTheme.emptyCard());
-                empty.setMaxWidth(520);
-                empty.setAlignment(Pos.CENTER);
-                songsList.setAlignment(Pos.CENTER);
-                songsList.getChildren().add(empty);
-                setStatus(I18n.get("menu.status.empty_folder"));
-                return;
-            }
-            int i = 1;
-            for (SongEntry e : entries) {
-                HBox row = buildRow(e, i);
-                // Asymetryczne wcięcie (nachodzące bloki w stylu P3R), przez margines
-                // layoutu — nie koliduje z animacją wysuwania (translateX).
-                VBox.setMargin(row, new Insets(0, 0, 0, (i % 2 == 0) ? 18 : 0));
-                songsList.getChildren().add(row);
-                i++;
-            }
-            int ready = (int) entries.stream().filter(SongEntry::hasBeatmap).count();
-            setStatus(I18n.format("menu.status.song_count", entries.size(), ready));
+            songEntries = new SongLibrary(songsDir).scan();
+            renderSongEntries();
         } catch (Exception ex) {
             LOG.log(Level.WARNING, "Skanowanie songs/ nie powiodło się", ex);
             setStatus(I18n.format("menu.status.error", ex.getMessage()));
         }
+    }
+
+    private void renderSongEntries() {
+        SoundManager.get().stopSongPreview();
+        songsList.getChildren().clear();
+        songsList.setAlignment(Pos.TOP_LEFT);
+        navRows.clear();
+        selectedIndex = -1;
+        resetStatsPanel();
+
+        if (songEntries.isEmpty()) {
+            addEmptyListMessage(I18n.get("menu.empty"));
+            setStatus(I18n.get("menu.status.empty_folder"));
+            return;
+        }
+
+        String query = normalizedSearch(searchField == null ? "" : searchField.getText());
+        List<SongEntry> visible = query.isEmpty()
+                ? songEntries
+                : songEntries.stream().filter(e -> matchesSearch(e, query)).toList();
+        if (visible.isEmpty()) {
+            addEmptyListMessage(I18n.get("menu.search.empty"));
+            setStatus(I18n.format("menu.status.search_empty", searchField.getText().trim()));
+            return;
+        }
+
+        int i = 1;
+        for (SongEntry e : visible) {
+            HBox row = buildRow(e, i);
+            // Asymetryczne wcięcie (nachodzące bloki w stylu P3R), przez margines
+            // layoutu — nie koliduje z animacją wysuwania (translateX).
+            VBox.setMargin(row, new Insets(0, 0, 0, (i % 2 == 0) ? 18 : 0));
+            songsList.getChildren().add(row);
+            i++;
+        }
+        int ready = (int) visible.stream().filter(SongEntry::hasBeatmap).count();
+        setStatus(I18n.format("menu.status.song_count", visible.size(), ready));
+    }
+
+    private void addEmptyListMessage(String text) {
+        Label empty = new Label(text);
+        empty.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
+        empty.setFont(PersonaMenuTheme.bodyFont(12));
+        empty.setWrapText(true);
+        empty.setStyle(PersonaMenuTheme.emptyCard());
+        empty.setMaxWidth(520);
+        empty.setAlignment(Pos.CENTER);
+        songsList.setAlignment(Pos.CENTER);
+        songsList.getChildren().add(empty);
+    }
+
+    private static boolean matchesSearch(SongEntry entry, String query) {
+        return normalizedSearch(entry.title()).contains(query)
+                || normalizedSearch(entry.audioPath().getFileName().toString()).contains(query)
+                || (entry.context() != null
+                && normalizedSearch(entry.context().songId()).contains(query));
+    }
+
+    private static String normalizedSearch(String raw) {
+        return raw == null ? "" : raw.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     private void setupSongDropTarget(javafx.scene.Node node) {
@@ -751,6 +802,17 @@ public final class MenuScreen {
                 closeHistory();
             }
             e.consume();
+            return;
+        }
+        if (searchField != null && searchField.isFocused()) {
+            if (e.getCode() == KeyCode.ESCAPE) {
+                if (!searchField.getText().isBlank()) {
+                    searchField.clear();
+                } else {
+                    root.requestFocus();
+                }
+                e.consume();
+            }
             return;
         }
         switch (e.getCode()) {

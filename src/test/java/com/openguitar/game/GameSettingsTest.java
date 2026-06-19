@@ -91,6 +91,7 @@ class GameSettingsTest {
         s.setUiSfxVolume(55);
         s.setReactionTimePreset(0);
         s.setReactionTimeMs(1_850);
+        s.setNoteOffsetMs(120);
         s.setShowComboPopups(false);
         s.setCountdownOnResume(false);
         s.setFullscreenOnStart(true);
@@ -109,12 +110,51 @@ class GameSettingsTest {
         assertFalse(loaded.gameplayHitSfx());
         assertEquals(55, loaded.uiSfxVolume());
         assertEquals(1_850, loaded.noteLookAheadMs());
+        assertEquals(120, loaded.noteOffsetMs());
         assertFalse(loaded.showComboPopups());
         assertFalse(loaded.countdownOnResume());
         assertTrue(loaded.fullscreenOnStart());
         assertFalse(loaded.muteWhenUnfocused());
         assertEquals("en", loaded.localeTag());
         assertEquals(KeyCode.SPACE, loaded.laneKey(2));
+    }
+
+    @Test
+    void resetToDefaultsShouldRestoreEverySetting() {
+        GameSettings s = GameSettings.get();
+        s.setCountdownSeconds(0);
+        s.setShowHitPopups(false);
+        s.setLobbyMusicVolume(12);
+        s.setSongMusicVolume(34);
+        s.setGameplayHitSfx(false);
+        s.setUiSfxVolume(56);
+        s.setReactionTimeMs(2_000);
+        s.setNoteOffsetMs(220);
+        s.setShowComboPopups(false);
+        s.setCountdownOnResume(false);
+        s.setFullscreenOnStart(true);
+        s.setMuteWhenUnfocused(false);
+        s.setLocaleTag("en");
+        s.setLaneKey(0, KeyCode.A);
+
+        s.resetToDefaults();
+
+        assertEquals(3, s.countdownSeconds());
+        assertTrue(s.showHitPopups());
+        assertEquals(100, s.lobbyMusicVolume());
+        assertEquals(100, s.songMusicVolume());
+        assertTrue(s.gameplayHitSfx());
+        assertEquals(72, s.uiSfxVolume());
+        assertEquals(GameSettings.REACTION_TIME_DEFAULT_MS, s.noteLookAheadMs());
+        assertEquals(0, s.noteOffsetMs());
+        assertTrue(s.showComboPopups());
+        assertTrue(s.countdownOnResume());
+        assertFalse(s.fullscreenOnStart());
+        assertTrue(s.muteWhenUnfocused());
+        assertEquals("en", s.localeTag());
+        assertEquals(KeyCode.D, s.laneKey(0));
+        assertEquals(KeyCode.F, s.laneKey(1));
+        assertEquals("PLAY", I18n.get("title.play"));
     }
 
     @Test
@@ -198,6 +238,27 @@ class GameSettingsTest {
         s.setReactionTimeMs(1);
         assertEquals(50, s.noteLookAheadMs());
         assertEquals("0.05 s", s.reactionTimeLabel());
+    }
+
+    @Test
+    void noteOffsetShouldClampAndFormatMilliseconds() {
+        GameSettings s = GameSettings.get();
+        s.setNoteOffsetMs(999);
+        assertEquals(500, s.noteOffsetMs());
+        assertEquals("500 ms", s.noteOffsetLabel());
+
+        s.setNoteOffsetMs(-999);
+        assertEquals(-500, s.noteOffsetMs());
+        assertEquals("-500 ms", s.noteOffsetLabel());
+    }
+
+    @Test
+    void shouldLoadNoteOffsetFromSettingsFile() throws Exception {
+        Path props = tempDir.resolve("settings.properties");
+        Files.writeString(props, "gameplay.note.offset.ms=-80\n");
+        GameSettings.resetForTests(props);
+
+        assertEquals(-80, GameSettings.get().noteOffsetMs());
     }
 
     @Test

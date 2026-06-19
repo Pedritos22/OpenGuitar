@@ -14,7 +14,8 @@ import java.util.logging.Logger;
 /**
  * Ustawienia użytkownika — plik {@code settings.properties}, zapis przez {@link #save()}.
  * Obejmuje: klawisze ścieżek, odliczanie, popupy trafień/combo, głośności (lobby, utwór, UI SFX),
- * dźwięki trafień, czas na reakcję ({@link #noteLookAheadMs()}), odliczanie po pauzie, pełny ekran przy starcie.
+ * dźwięki trafień, czas na reakcję ({@link #noteLookAheadMs()}), offset nut, odliczanie po pauzie,
+ * pełny ekran przy starcie.
  */
 public final class GameSettings {
 
@@ -42,6 +43,11 @@ public final class GameSettings {
     public static final int[] REACTION_TIME_MS = {2_200, 1_650, 1_200};
     public static final int REACTION_TIME_DEFAULT = 1;
 
+    /** Przesunięcie nut względem audio (ms): dodatnie opóźnia nuty dla opóźnionego odsłuchu. */
+    public static final int NOTE_OFFSET_MIN_MS = -500;
+    public static final int NOTE_OFFSET_MAX_MS = 500;
+    public static final int NOTE_OFFSET_STEP_MS = 10;
+
     /** Obsługiwane języki UI (dodaj {@code messages_xx.properties} w {@code i18n/}). */
     public static final String[] LOCALE_TAGS = {"pl", "en", "de", "es", "fr", "it"};
     public static final String LOCALE_DEFAULT = "pl";
@@ -65,6 +71,8 @@ public final class GameSettings {
     private int uiSfxVolume = 72;
     /** Dokładny czas na reakcję w ms. */
     private int reactionTimeMs = REACTION_TIME_DEFAULT_MS;
+    /** Przesunięcie nut względem zegara audio w ms. */
+    private int noteOffsetMs = 0;
     /** Komunikaty combo, mnożnika i zerwania combo nad torami. */
     private boolean showComboPopups = true;
     /** Odliczanie po wznowieniu z pauzy (gdy countdown &gt; 0). */
@@ -151,6 +159,14 @@ public final class GameSettings {
     public String reactionTimeLabel() {
         return I18n.format("settings.seconds",
                 String.format(Locale.ROOT, "%.2f", reactionTimeMs / 1000.0));
+    }
+
+    public int noteOffsetMs() {
+        return noteOffsetMs;
+    }
+
+    public String noteOffsetLabel() {
+        return I18n.format("settings.milliseconds", noteOffsetMs);
     }
 
     public boolean showComboPopups() {
@@ -250,6 +266,10 @@ public final class GameSettings {
         reactionTimeMs = Math.max(REACTION_TIME_MIN_MS, Math.min(REACTION_TIME_MAX_MS, milliseconds));
     }
 
+    public void setNoteOffsetMs(int milliseconds) {
+        noteOffsetMs = Math.max(NOTE_OFFSET_MIN_MS, Math.min(NOTE_OFFSET_MAX_MS, milliseconds));
+    }
+
     public void setShowComboPopups(boolean show) {
         showComboPopups = show;
     }
@@ -269,6 +289,22 @@ public final class GameSettings {
     public void setLocaleTag(String tag) {
         localeTag = normalizeLocaleTag(tag);
         I18n.setLocaleTag(localeTag);
+    }
+
+    public void resetToDefaults() {
+        System.arraycopy(DEFAULT_KEYS, 0, laneKeys, 0, laneKeys.length);
+        countdownSeconds = 3;
+        showHitPopups = true;
+        lobbyMusicVolume = 100;
+        songMusicVolume = 100;
+        gameplayHitSfx = true;
+        uiSfxVolume = 72;
+        reactionTimeMs = REACTION_TIME_DEFAULT_MS;
+        noteOffsetMs = 0;
+        showComboPopups = true;
+        countdownOnResume = true;
+        fullscreenOnStart = false;
+        muteWhenUnfocused = true;
     }
 
     public void cycleLocale(int delta) {
@@ -342,6 +378,8 @@ public final class GameSettings {
                 p.getProperty("audio.gameplay.sfx", Boolean.toString(gameplayHitSfx)));
         uiSfxVolume = parseInt(p.getProperty("audio.ui.sfx.volume"), uiSfxVolume,
                 VOLUME_MIN, VOLUME_MAX);
+        setNoteOffsetMs(parseInt(p.getProperty("gameplay.note.offset.ms"), noteOffsetMs,
+                NOTE_OFFSET_MIN_MS, NOTE_OFFSET_MAX_MS));
         String reactionMsRaw = p.getProperty("gameplay.reaction.time.ms");
         if (reactionMsRaw != null) {
             setReactionTimeMs(parseInt(reactionMsRaw, reactionTimeMs,
@@ -378,6 +416,7 @@ public final class GameSettings {
         p.setProperty("audio.song.volume", Integer.toString(songMusicVolume));
         p.setProperty("audio.gameplay.sfx", Boolean.toString(gameplayHitSfx));
         p.setProperty("audio.ui.sfx.volume", Integer.toString(uiSfxVolume));
+        p.setProperty("gameplay.note.offset.ms", Integer.toString(noteOffsetMs));
         p.setProperty("gameplay.reaction.time.ms", Integer.toString(reactionTimeMs));
         p.setProperty("popups.combo", Boolean.toString(showComboPopups));
         p.setProperty("gameplay.countdown.resume", Boolean.toString(countdownOnResume));

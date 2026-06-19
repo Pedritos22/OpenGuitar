@@ -37,6 +37,8 @@ final class SettingsOverlay {
     private Label countdownValue;
     private TextField reactionTimeValue;
     private Slider reactionTimeSlider;
+    private TextField noteOffsetValue;
+    private Slider noteOffsetSlider;
     private Button popupsToggle;
     private Button comboPopupsToggle;
     private Button countdownResumeToggle;
@@ -131,13 +133,15 @@ final class SettingsOverlay {
                         muteUnfocusedRow()),
                 sectionBlock(I18n.get("settings.section.gameplay"),
                         reactionTimeRow(),
+                        noteOffsetRow(),
                         countdownRow(),
                         countdownResumeRow(),
                         popupsRow(),
                         comboPopupsRow()),
                 sectionBlock(I18n.get("settings.section.display"),
                         languageRow(),
-                        fullscreenRow()));
+                        fullscreenRow(),
+                        resetDefaultsRow()));
         body.setFillWidth(true);
 
         ScrollPane scroll = new ScrollPane(body);
@@ -460,6 +464,74 @@ final class SettingsOverlay {
         updateReactionTimeValue();
     }
 
+    private VBox noteOffsetRow() {
+        Label name = new Label(I18n.get("settings.note_offset"));
+        name.setFont(PersonaMenuTheme.labelFont(11));
+        name.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
+        HBox.setHgrow(name, Priority.ALWAYS);
+        name.setMinWidth(0);
+        name.setMaxWidth(Double.MAX_VALUE);
+
+        noteOffsetValue = new TextField();
+        noteOffsetValue.setFont(PersonaMenuTheme.labelFont(11));
+        noteOffsetValue.setStyle(PersonaMenuTheme.reactionTimeField());
+        noteOffsetValue.setMinWidth(72);
+        noteOffsetValue.setPrefWidth(72);
+        noteOffsetValue.setMaxWidth(72);
+        noteOffsetValue.setAlignment(Pos.CENTER_RIGHT);
+        noteOffsetValue.setPromptText("0");
+        noteOffsetValue.setOnAction(e -> commitNoteOffsetValue());
+        noteOffsetValue.focusedProperty().addListener((obs, wasFocused, focused) -> {
+            if (!focused) {
+                commitNoteOffsetValue();
+            }
+        });
+        updateNoteOffsetValue();
+
+        Slider slider = new Slider(GameSettings.NOTE_OFFSET_MIN_MS,
+                GameSettings.NOTE_OFFSET_MAX_MS, GameSettings.get().noteOffsetMs());
+        noteOffsetSlider = slider;
+        slider.setBlockIncrement(GameSettings.NOTE_OFFSET_STEP_MS);
+        slider.setMajorTickUnit(100);
+        slider.setMinorTickCount(4);
+        slider.setSnapToTicks(false);
+        slider.setStyle(PersonaMenuTheme.volumeSlider());
+        slider.setMaxWidth(Double.MAX_VALUE);
+        slider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            GameSettings.get().setNoteOffsetMs(newVal.intValue());
+            if (!noteOffsetValue.isFocused()) {
+                updateNoteOffsetValue();
+            }
+        });
+        slider.setOnMouseReleased(e -> SoundManager.get().play(SoundManager.Sfx.NAV));
+
+        HBox header = new HBox(8, name, noteOffsetValue);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        VBox row = new VBox(3, header, slider);
+        row.setFillWidth(true);
+        row.setStyle(PersonaMenuTheme.settingRowCompact());
+        return row;
+    }
+
+    private void updateNoteOffsetValue() {
+        noteOffsetValue.setText(Integer.toString(GameSettings.get().noteOffsetMs()));
+    }
+
+    private void commitNoteOffsetValue() {
+        String raw = noteOffsetValue.getText().trim();
+        try {
+            GameSettings.get().setNoteOffsetMs(Integer.parseInt(raw));
+            if (noteOffsetSlider != null) {
+                noteOffsetSlider.setValue(GameSettings.get().noteOffsetMs());
+            }
+            SoundManager.get().play(SoundManager.Sfx.NAV);
+        } catch (NumberFormatException ex) {
+            // Przy błędnym wpisie wracamy do ostatniej poprawnej wartości.
+        }
+        updateNoteOffsetValue();
+    }
+
     private HBox countdownResumeRow() {
         HBox row = toggleRow(I18n.get("settings.countdown.resume"), b -> countdownResumeToggle = b, () -> {
             GameSettings s = GameSettings.get();
@@ -544,6 +616,33 @@ final class SettingsOverlay {
 
     private void updateFullscreenToggle() {
         setToggleText(fullscreenToggle, GameSettings.get().fullscreenOnStart());
+    }
+
+    private HBox resetDefaultsRow() {
+        Label label = new Label(I18n.get("settings.reset"));
+        label.setFont(PersonaMenuTheme.labelFont(11));
+        label.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
+        HBox.setHgrow(label, Priority.ALWAYS);
+        label.setMinWidth(0);
+        label.setMaxWidth(Double.MAX_VALUE);
+
+        Button reset = new Button(I18n.get("settings.reset.action"));
+        reset.setStyle(PersonaMenuTheme.toolbarButton());
+        reset.setMinHeight(PersonaMenuTheme.SETTINGS_BTN_HEIGHT);
+        reset.setPrefHeight(PersonaMenuTheme.SETTINGS_BTN_HEIGHT);
+        reset.setMaxHeight(PersonaMenuTheme.SETTINGS_BTN_HEIGHT);
+        reset.setMinWidth(Region.USE_PREF_SIZE);
+        reset.setOnAction(e -> {
+            GameSettings.get().resetToDefaults();
+            SoundManager.get().refreshLobbyVolume();
+            SoundManager.get().play(SoundManager.Sfx.CONFIRM);
+            rebuildOverlay();
+        });
+
+        HBox row = new HBox(8, label, reset);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setStyle(PersonaMenuTheme.settingRowCompact());
+        return row;
     }
 
     private HBox toggleRow(String name, java.util.function.Consumer<Button> register,

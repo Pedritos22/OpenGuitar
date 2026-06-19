@@ -234,6 +234,7 @@ public final class GameScreen {
     private final boolean showComboPopups = GameSettings.get().showComboPopups();
     private final boolean countdownOnResume = GameSettings.get().countdownOnResume();
     private final int lookAheadMs;
+    private final int noteOffsetMs;
     private final long countdownTotalNanos;
     private boolean countingDown = false;
     private long countdownStartNanos = -1;
@@ -251,6 +252,7 @@ public final class GameScreen {
         GameSettings settings = GameSettings.get();
         this.laneKeys = settings.laneKeys();
         this.lookAheadMs = settings.noteLookAheadMs();
+        this.noteOffsetMs = settings.noteOffsetMs();
         int cdSeconds = settings.countdownSeconds();
         // Numery liczymy przez cdSeconds sekund, potem krótki błysk „GO!”.
         this.countdownTotalNanos = cdSeconds <= 0
@@ -265,7 +267,7 @@ public final class GameScreen {
 
         int lastNoteMs = runtimeNotes.isEmpty()
                 ? 0
-                : runtimeNotes.get(runtimeNotes.size() - 1).note.timeMs();
+                : runtimeNotes.get(runtimeNotes.size() - 1).timeMs(noteOffsetMs);
         this.songEndTimeMs = lastNoteMs + END_GRACE_PERIOD_MS;
 
         this.canvas = new Canvas(CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -662,7 +664,7 @@ public final class GameScreen {
         int missDeadline = (int) currentTimeMs - HitJudgment.hitWindowMs();
         for (RuntimeNote rn : runtimeNotes) {
             if (rn.processed) continue;
-            if (rn.note.timeMs() < missDeadline) {
+            if (rn.timeMs(noteOffsetMs) < missDeadline) {
                 rn.processed = true;
                 rn.judgment = HitJudgment.MISS;
                 applyMiss(rn.note.lane());
@@ -822,7 +824,7 @@ public final class GameScreen {
             RuntimeNote rn = runtimeNotes.get(i);
             if (rn.processed) continue;
             if (rn.note.lane() != lane) continue;
-            int dt = rn.note.timeMs() - currentMs;
+            int dt = rn.timeMs(noteOffsetMs) - currentMs;
             if (dt > HitJudgment.hitWindowMs()) break; // za daleko w przyszłości - reszta tym bardziej
             int absDt = Math.abs(dt);
             if (absDt < bestAbsDt && absDt <= HitJudgment.hitWindowMs()) {
@@ -1402,7 +1404,7 @@ public final class GameScreen {
         int lo = firstVisibleIndex(cur - 120);
         int upper = cur + lookAheadMs;
         int hi = lo;
-        while (hi < n && runtimeNotes.get(hi).note.timeMs() <= upper) {
+        while (hi < n && runtimeNotes.get(hi).timeMs(noteOffsetMs) <= upper) {
             hi++;
         }
         // Większy indeks = większy czas = większy dt = dalej (mniejsza głębokość):
@@ -1412,7 +1414,7 @@ public final class GameScreen {
             if (rn.processed) {
                 continue;
             }
-            if (!computePlacement(rn.note.lane(), rn.note.timeMs() - cur)) {
+            if (!computePlacement(rn.note.lane(), rn.timeMs(noteOffsetMs) - cur)) {
                 continue;
             }
             // Kryształ skalujemy lekko w pionie, by „odłamek” był wyrazisty
@@ -1428,7 +1430,7 @@ public final class GameScreen {
         int hi = runtimeNotes.size();
         while (lo < hi) {
             int mid = (lo + hi) >>> 1;
-            if (runtimeNotes.get(mid).note.timeMs() < thresholdMs) {
+            if (runtimeNotes.get(mid).timeMs(noteOffsetMs) < thresholdMs) {
                 lo = mid + 1;
             } else {
                 hi = mid;
@@ -1677,6 +1679,10 @@ public final class GameScreen {
         HitJudgment judgment;
 
         RuntimeNote(Note note) { this.note = note; }
+
+        int timeMs(int noteOffsetMs) {
+            return note.timeMs() + noteOffsetMs;
+        }
     }
 
     private static RankStampLayout computeRankStampLayout(Rank rank, double ringR) {
