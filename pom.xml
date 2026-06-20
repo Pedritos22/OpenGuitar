@@ -99,6 +99,18 @@
             <version>5.10.3</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- Discord Api integration -->
+        <dependency>
+            <groupId>io.github.CDAGaming</groupId>
+            <artifactId>DiscordIPC</artifactId>
+            <version>0.10.2</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
     </dependencies>
 
     <build>

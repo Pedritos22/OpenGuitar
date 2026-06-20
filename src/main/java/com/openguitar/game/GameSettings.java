@@ -84,6 +84,13 @@ public final class GameSettings {
     /** Tag języka UI (BCP 47), np. {@code pl} lub {@code en}. */
     private String localeTag = LOCALE_DEFAULT;
 
+    /** Discord Api Settings */
+    /** App Id z discord developers */
+    private long discordAppId = 1516739980096180264L;
+    /** Link do githuba gry */
+    private String githubLink = "https://github.com/Pedritos22/OpenGuitar";
+
+
     private GameSettings() {}
 
     /** Globalna instancja (wczytywana z dysku przy pierwszym użyciu). */
@@ -208,6 +215,14 @@ public final class GameSettings {
 
     private static double volumeScale(int percent) {
         return Math.max(VOLUME_MIN, Math.min(VOLUME_MAX, percent)) / 100.0;
+    }
+
+    public long discordAppId() {
+        return discordAppId;
+    }
+
+    public String githubLink() {
+        return githubLink;
     }
 
     // ── settery (bez zapisu — wołaj save() po edycji) ─────────────────────────
