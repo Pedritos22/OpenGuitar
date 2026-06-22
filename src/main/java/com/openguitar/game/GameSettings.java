@@ -79,6 +79,8 @@ public final class GameSettings {
     private boolean countdownOnResume = true;
     /** Uruchom grę w trybie pełnoekranowym. */
     private boolean fullscreenOnStart = false;
+    /** Pokazuj licznik FPS w HUD rozgrywki. */
+    private boolean showFpsCounter = false;
     /** Wycisz całą aplikację, gdy jej okno nie ma fokusu. */
     private boolean muteWhenUnfocused = true;
     /** Tag języka UI (BCP 47), np. {@code pl} lub {@code en}. */
@@ -179,6 +181,10 @@ public final class GameSettings {
 
     public boolean fullscreenOnStart() {
         return fullscreenOnStart;
+    }
+
+    public boolean showFpsCounter() {
+        return showFpsCounter;
     }
 
     public boolean muteWhenUnfocused() {
@@ -282,6 +288,10 @@ public final class GameSettings {
         fullscreenOnStart = enabled;
     }
 
+    public void setShowFpsCounter(boolean enabled) {
+        showFpsCounter = enabled;
+    }
+
     public void setMuteWhenUnfocused(boolean enabled) {
         muteWhenUnfocused = enabled;
     }
@@ -304,6 +314,7 @@ public final class GameSettings {
         showComboPopups = true;
         countdownOnResume = true;
         fullscreenOnStart = false;
+        showFpsCounter = false;
         muteWhenUnfocused = true;
     }
 
@@ -398,6 +409,8 @@ public final class GameSettings {
                 p.getProperty("gameplay.countdown.resume", Boolean.toString(countdownOnResume)));
         fullscreenOnStart = Boolean.parseBoolean(
                 p.getProperty("display.fullscreen.start", Boolean.toString(fullscreenOnStart)));
+        showFpsCounter = Boolean.parseBoolean(
+                p.getProperty("display.fps.counter", Boolean.toString(showFpsCounter)));
         muteWhenUnfocused = Boolean.parseBoolean(
                 p.getProperty("audio.mute.unfocused", Boolean.toString(muteWhenUnfocused)));
         setLocaleTag(p.getProperty("display.locale", localeTag));
@@ -421,6 +434,7 @@ public final class GameSettings {
         p.setProperty("popups.combo", Boolean.toString(showComboPopups));
         p.setProperty("gameplay.countdown.resume", Boolean.toString(countdownOnResume));
         p.setProperty("display.fullscreen.start", Boolean.toString(fullscreenOnStart));
+        p.setProperty("display.fps.counter", Boolean.toString(showFpsCounter));
         p.setProperty("audio.mute.unfocused", Boolean.toString(muteWhenUnfocused));
         p.setProperty("display.locale", localeTag);
         try {

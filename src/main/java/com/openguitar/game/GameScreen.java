@@ -107,6 +107,8 @@ public final class GameScreen {
 
     /** Czas trwania „pop” licznika HUD (skalowanie po zmianie wartości). */
     private static final long HUD_POP_NANOS = 220_000_000L;
+    private static final long FPS_SAMPLE_WINDOW_NANOS = 500_000_000L;
+    private static final double NANOS_PER_SECOND = 1_000_000_000.0;
 
     /** Czas trwania błysku „GO!” na końcu odliczania startowego. */
     private static final long GO_FLASH_NANOS = 600_000_000L;
@@ -221,6 +223,11 @@ public final class GameScreen {
     private long comboPopNanos = -HUD_POP_NANOS;
     private long multPopNanos = -HUD_POP_NANOS;
 
+    // FPS counter
+    private int fpsFrameCount = 0;
+    private int shownFps = 0;
+    private long fpsWindowStartNanos = -1;
+
     // Ekran wyników (animowany, w stylu P3R). Pętla renderująca działa dalej,
     // by animować wjazd paneli, „count-up” liczb i stempel rangi.
     private boolean showingResults = false;
@@ -232,6 +239,7 @@ public final class GameScreen {
     // Podczas odliczania zegar i audio stoją — scena jest zamrożona, rysujemy overlay.
     private final boolean showHitPopups = GameSettings.get().showHitPopups();
     private final boolean showComboPopups = GameSettings.get().showComboPopups();
+    private final boolean showFpsCounter = GameSettings.get().showFpsCounter();
     private final boolean countdownOnResume = GameSettings.get().countdownOnResume();
     private final int lookAheadMs;
     private final int noteOffsetMs;
@@ -544,6 +552,10 @@ public final class GameScreen {
     // ---------- pętla gry ----------
 
     private void tick(long nowNanos) {
+        if (showFpsCounter) {
+            updateFps(nowNanos);
+        }
+
         if (finished) {
             // Po zakończeniu utworu pętla żyje tylko po to, by animować ekran wyników.
             if (showingResults) {
@@ -1493,6 +1505,22 @@ public final class GameScreen {
         return true;
     }
 
+    private void updateFps(long nowNanos) {
+        if (fpsWindowStartNanos < 0) {
+            fpsWindowStartNanos = nowNanos;
+            fpsFrameCount = 0;
+            return;
+        }
+
+        fpsFrameCount++;
+        long elapsed = nowNanos - fpsWindowStartNanos;
+        if (elapsed >= FPS_SAMPLE_WINDOW_NANOS) {
+            shownFps = (int) Math.round(fpsFrameCount * NANOS_PER_SECOND / elapsed);
+            fpsFrameCount = 0;
+            fpsWindowStartNanos = nowNanos;
+        }
+    }
+
     private void drawHud(GraphicsContext g, long nowNanos) {
         int scoreVal = score.totalScore();
         int comboVal = score.combo();
@@ -1534,6 +1562,10 @@ public final class GameScreen {
         g.fillRect(0, 0, CANVAS_WIDTH * prog, 5);
         g.setFill(PersonaPalette.AQUA_BRIGHT);
         g.fillRect(Math.max(0, CANVAS_WIDTH * prog - 2), 0, 3, 6);
+        if (showFpsCounter && shownFps > 0) {
+            PersonaText.plain(g, "FPS: " + shownFps, CANVAS_WIDTH / 2.0, 20,
+                    PersonaFonts.label(11), PersonaPalette.WHITE_DIM, TextAlignment.CENTER);
+        }
 
         // ── pasek tytułu + postęp utworu (dół, ukośny) ──
         double barW = Math.min(360, CANVAS_WIDTH - 40);
