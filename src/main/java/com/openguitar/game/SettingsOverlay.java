@@ -43,6 +43,7 @@ final class SettingsOverlay {
     private Button comboPopupsToggle;
     private Button countdownResumeToggle;
     private Button fullscreenToggle;
+    private Button fpsCounterToggle;
     private Button hitSfxToggle;
     private Button muteUnfocusedToggle;
     private Label languageValue;
@@ -141,6 +142,7 @@ final class SettingsOverlay {
                 sectionBlock(I18n.get("settings.section.display"),
                         languageRow(),
                         fullscreenRow(),
+                        fpsCounterRow(),
                         resetDefaultsRow()));
         body.setFillWidth(true);
 
@@ -616,6 +618,20 @@ final class SettingsOverlay {
 
     private void updateFullscreenToggle() {
         setToggleText(fullscreenToggle, GameSettings.get().fullscreenOnStart());
+    }
+
+    private HBox fpsCounterRow() {
+        HBox row = toggleRow(I18n.get("settings.fps.counter"), b -> fpsCounterToggle = b, () -> {
+            GameSettings s = GameSettings.get();
+            s.setShowFpsCounter(!s.showFpsCounter());
+            updateFpsCounterToggle();
+        });
+        updateFpsCounterToggle();
+        return row;
+    }
+
+    private void updateFpsCounterToggle() {
+        setToggleText(fpsCounterToggle, GameSettings.get().showFpsCounter());
     }
 
     private HBox resetDefaultsRow() {

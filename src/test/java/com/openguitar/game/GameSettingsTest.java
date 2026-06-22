@@ -95,6 +95,7 @@ class GameSettingsTest {
         s.setShowComboPopups(false);
         s.setCountdownOnResume(false);
         s.setFullscreenOnStart(true);
+        s.setShowFpsCounter(true);
         s.setMuteWhenUnfocused(false);
         s.setLocaleTag("en");
         s.setLaneKey(2, KeyCode.SPACE);
@@ -114,6 +115,7 @@ class GameSettingsTest {
         assertFalse(loaded.showComboPopups());
         assertFalse(loaded.countdownOnResume());
         assertTrue(loaded.fullscreenOnStart());
+        assertTrue(loaded.showFpsCounter());
         assertFalse(loaded.muteWhenUnfocused());
         assertEquals("en", loaded.localeTag());
         assertEquals(KeyCode.SPACE, loaded.laneKey(2));
@@ -133,6 +135,7 @@ class GameSettingsTest {
         s.setShowComboPopups(false);
         s.setCountdownOnResume(false);
         s.setFullscreenOnStart(true);
+        s.setShowFpsCounter(true);
         s.setMuteWhenUnfocused(false);
         s.setLocaleTag("en");
         s.setLaneKey(0, KeyCode.A);
@@ -150,6 +153,7 @@ class GameSettingsTest {
         assertTrue(s.showComboPopups());
         assertTrue(s.countdownOnResume());
         assertFalse(s.fullscreenOnStart());
+        assertFalse(s.showFpsCounter());
         assertTrue(s.muteWhenUnfocused());
         assertEquals("en", s.localeTag());
         assertEquals(KeyCode.D, s.laneKey(0));
