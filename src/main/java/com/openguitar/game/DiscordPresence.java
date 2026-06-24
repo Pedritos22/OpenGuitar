@@ -10,29 +10,26 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 public final class DiscordPresence {
-    static enum DiscordStates {
+    public enum DiscordState {
         CHOOSING_SONG,
         PLAYING_SONG
     };
 
     private static final long APPLICATION_ID = GameSettings.get().discordAppId();
     private static final String GITHUB_URL = GameSettings.get().githubLink();
+    private static final long START_TIMESTAMP = getCurrentTimestamp();
 
     private static IPCClient client;
+
     private static boolean connected = false;
-
-    private static JsonArray getPresenceButtons() {
-        JsonArray buttons = new JsonArray();
-
-        JsonObject github = new JsonObject();
-        github.addProperty("label", "Game GitHub");
-        github.addProperty("url", GITHUB_URL);
-        buttons.add(github);
-
-        return buttons;
-    }
+    private static DiscordState pendingState = null;
+    private static String pendingSong = null;
 
     public static void start() {
+        if (client != null && connected) {
+            return;
+        }
+
         client = new IPCClient(APPLICATION_ID);
 
         client.setListener(new IPCListener() {
@@ -45,6 +42,9 @@ public final class DiscordPresence {
             @Override
             public void onReady(IPCClient client) {
                 connected = true;
+                if (pendingState != null) {
+                    updatePresence(pendingState, pendingSong);
+                }
             }
 
             @Override
@@ -61,37 +61,41 @@ public final class DiscordPresence {
         try {
             client.connect();
         } catch (Exception e) {
+            connected = false;
             System.out.println("Discord not active: " + e.getMessage());
         }
     }
 
-    public static void updatePresence(int state) {
-        if (!connected) return;
-        try {
-            RichPresence.Builder builder = new RichPresence.Builder();
-            builder.setActivityType(ActivityType.Playing)
-                .setDetails(state == DiscordStates.CHOOSING_SONG.ordinal() ? 
-                    I18n.get("discord.choosing") : 
-                    I18n.get("discord.playing"))
-                .setStartTimestamp(System.currentTimeMillis() / 1000L)
-                .setButtons(getPresenceButtons());
-            client.sendRichPresence(builder.build());
-        } catch (Exception e) {
-            System.out.println("Rich Presence Error: " + e.getMessage());
-        }
+    public static void updatePresence(DiscordState state) {
+        updatePresence(state, null);
     }
 
-    public static void updatePresence(int state, String songName) {
-        if (!connected) return;
+    public static void updatePresence(DiscordState state, String songName) {
+        if (state == null) {
+            return;
+        }
+
+        pendingState = state;
+        pendingSong = songName;
+
+        if (!connected || client == null) {
+            return;
+        }
+
         try {
             RichPresence.Builder builder = new RichPresence.Builder();
-            builder.setState(songName)
-                .setActivityType(ActivityType.Playing)
-                .setDetails(state == DiscordStates.CHOOSING_SONG.ordinal() ? 
-                    I18n.get("discord.choosing") : 
-                    I18n.get("discord.playing"))
-                .setStartTimestamp(System.currentTimeMillis() / 1000L)
+
+            builder.setActivityType(ActivityType.Playing)
+                .setDetails(getDetailsForState(state))
                 .setButtons(getPresenceButtons());
+
+            if (isValidSongName(songName)) {
+                builder.setState(songName)
+                    .setStartTimestamp(getCurrentTimestamp()); // Song elapsed Time
+            } else {
+                builder.setStartTimestamp(START_TIMESTAMP);
+            }
+                
             client.sendRichPresence(builder.build());
         } catch (Exception e) {
             System.out.println("Rich Presence Error: " + e.getMessage());
@@ -102,5 +106,31 @@ public final class DiscordPresence {
         if (client != null) {
             try { client.close(); } catch (Exception ignored) {}
         }
+    }
+
+    // Helpers
+    private static JsonArray getPresenceButtons() {
+        JsonArray buttons = new JsonArray();
+
+        JsonObject github = new JsonObject();
+        github.addProperty("label", "Game GitHub");
+        github.addProperty("url", GITHUB_URL);
+        buttons.add(github);
+
+        return buttons;
+    }
+
+    private static String getDetailsForState(DiscordState state) {
+        if (state == DiscordState.CHOOSING_SONG) 
+            return I18n.get("discord.choosing");
+        return I18n.get("discord.playing");
+    }
+
+    private static boolean isValidSongName(String songName) {
+        return songName != null && !songName.isBlank();
+    }
+
+    private static long getCurrentTimestamp() {
+        return System.currentTimeMillis() / 1000L;
     }
 }

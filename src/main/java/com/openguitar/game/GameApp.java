@@ -83,6 +83,8 @@ public class GameApp extends Application {
             }
         });
 
+        DiscordPresence.start();
+        
         SongContext fromArgs = loadFromArgs(getParameters().getRaw());
         if (fromArgs != null) {
             returnToMenuAfterSong = false;
@@ -96,7 +98,6 @@ public class GameApp extends Application {
             stage.setFullScreen(true);
             GameLog.fine(LOG, "app", "start() — pełny ekran z ustawień");
         }
-        DiscordPresence.start();
     }
 
     // --------------------------- menu / game switching ---------------------
@@ -119,6 +120,7 @@ public class GameApp extends Application {
                 GameLog.fine(LOG, "app", "launchTitle() — focus na panelu startowym");
             }
         });
+        DiscordPresence.updatePresence(DiscordPresence.DiscordState.CHOOSING_SONG, "");
     }
 
     private void launchMenu() {
@@ -144,7 +146,7 @@ public class GameApp extends Application {
                 GameLog.fine(LOG, "app", "launchMenu() — focus na menu");
             }
         });
-        DiscordPresence.updatePresence(DiscordPresence.DiscordStates.CHOOSING_SONG.ordinal(), "");
+        DiscordPresence.updatePresence(DiscordPresence.DiscordState.CHOOSING_SONG, "");
     }
 
     private void launchGame(SongContext context) {
@@ -162,7 +164,7 @@ public class GameApp extends Application {
         showScene(screen.getScene(), "OpenGuitar - " + context.title());
         screen.start();
         GameLog.event(LOG, "app", "launchGame() — GameScreen.start() wywołane");
-        DiscordPresence.updatePresence(DiscordPresence.DiscordStates.PLAYING_SONG.ordinal(), context.title());
+        DiscordPresence.updatePresence(DiscordPresence.DiscordState.PLAYING_SONG, context.title());
     }
 
     /**
