@@ -26,6 +26,9 @@ public final class DiscordPresence {
     private static String pendingSong = null;
 
     public static void start() {
+        if (GameSettings.get().disableRichPresence()) {
+            return;
+        }
         if (client != null && connected) {
             return;
         }
@@ -78,6 +81,10 @@ public final class DiscordPresence {
         pendingState = state;
         pendingSong = songName;
 
+        if (GameSettings.get().disableRichPresence()) {
+            return;
+        }
+
         if (!connected || client == null) {
             return;
         }
@@ -105,6 +112,17 @@ public final class DiscordPresence {
     public static void stop() {
         if (client != null) {
             try { client.close(); } catch (Exception ignored) {}
+        }
+        client = null;
+        connected = false;
+    }
+
+    /** Włącza lub wyłącza połączenie z Discordem bez ponownego uruchamiania gry. */
+    public static void setRichPresenceDisabled(boolean disabled) {
+        if (disabled) {
+            stop();
+        } else {
+            start();
         }
     }
 

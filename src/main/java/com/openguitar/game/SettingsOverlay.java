@@ -45,6 +45,7 @@ final class SettingsOverlay {
     private Button fullscreenToggle;
     private Button hitSfxToggle;
     private Button muteUnfocusedToggle;
+    private Button disableRichPresenceToggle;
     private Label languageValue;
 
     private Runnable onLocaleChanged;
@@ -141,6 +142,7 @@ final class SettingsOverlay {
                 sectionBlock(I18n.get("settings.section.display"),
                         languageRow(),
                         fullscreenRow(),
+                        disableRichPresenceRow(),
                         resetDefaultsRow()));
         body.setFillWidth(true);
 
@@ -618,6 +620,22 @@ final class SettingsOverlay {
         setToggleText(fullscreenToggle, GameSettings.get().fullscreenOnStart());
     }
 
+    private HBox disableRichPresenceRow() {
+        HBox row = toggleRow(I18n.get("settings.disable_rich_presence"), b -> disableRichPresenceToggle = b, () -> {
+            GameSettings settings = GameSettings.get();
+            boolean disabled = !settings.disableRichPresence();
+            settings.setDisableRichPresence(disabled);
+            DiscordPresence.setRichPresenceDisabled(disabled);
+            updateDisableRichPresenceToggle();
+        });
+        updateDisableRichPresenceToggle();
+        return row;
+    }
+
+    private void updateDisableRichPresenceToggle() {
+        setToggleText(disableRichPresenceToggle, GameSettings.get().disableRichPresence());
+    }
+
     private HBox resetDefaultsRow() {
         Label label = new Label(I18n.get("settings.reset"));
         label.setFont(PersonaMenuTheme.labelFont(11));
@@ -635,6 +653,7 @@ final class SettingsOverlay {
         reset.setOnAction(e -> {
             GameSettings.get().resetToDefaults();
             SoundManager.get().refreshLobbyVolume();
+            DiscordPresence.setRichPresenceDisabled(GameSettings.get().disableRichPresence());
             SoundManager.get().play(SoundManager.Sfx.CONFIRM);
             rebuildOverlay();
         });
