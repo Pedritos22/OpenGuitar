@@ -19,7 +19,9 @@ public final class DiscordPresence {
     private static final String GITHUB_URL = GameSettings.get().githubLink();
     private static final long START_TIMESTAMP = getCurrentTimestamp();
 
+    private static final Object LOCK = new Object();
     private static IPCClient client;
+    private static Thread connectThread;
 
     private static boolean connected = false;
     private static DiscordState pendingState = null;
@@ -29,42 +31,73 @@ public final class DiscordPresence {
         if (GameSettings.get().disableRichPresence()) {
             return;
         }
-        if (client != null && connected) {
-            return;
+
+        final IPCClient newClient;
+        synchronized (LOCK) {
+            if (client != null && (connected || isConnecting())) {
+                return;
+            }
+            newClient = new IPCClient(APPLICATION_ID);
+            client = newClient;
+            client.setListener(new IPCListener() {
+                @Override public void onPacketSent(IPCClient client, Packet packet) {}
+                @Override public void onPacketReceived(IPCClient client, Packet packet) {}
+                @Override public void onActivityJoin(IPCClient client, String secret) {}
+                @Override public void onActivitySpectate(IPCClient client, String secret) {}
+                @Override public void onActivityJoinRequest(IPCClient client, String secret, User user) {}
+
+                @Override
+                public void onReady(IPCClient readyClient) {
+                    DiscordState state;
+                    String song;
+                    synchronized (LOCK) {
+                        if (DiscordPresence.client != readyClient || GameSettings.get().disableRichPresence()) {
+                            return;
+                        }
+                        connected = true;
+                        state = pendingState;
+                        song = pendingSong;
+                    }
+                    if (state != null) {
+                        updatePresence(state, song);
+                    }
+                }
+
+                @Override
+                public void onClose(IPCClient closedClient, JsonObject json) {
+                    synchronized (LOCK) {
+                        if (DiscordPresence.client == closedClient) {
+                            connected = false;
+                        }
+                    }
+                }
+
+                @Override
+                public void onDisconnect(IPCClient disconnectedClient, Throwable t) {
+                    synchronized (LOCK) {
+                        if (DiscordPresence.client == disconnectedClient) {
+                            connected = false;
+                        }
+                    }
+                }
+            });
+
+            connectThread = new Thread(() -> connect(newClient), "discord-presence-connect");
+            connectThread.setDaemon(true);
+            connectThread.start();
         }
+    }
 
-        client = new IPCClient(APPLICATION_ID);
-
-        client.setListener(new IPCListener() {
-            @Override public void onPacketSent(IPCClient client, Packet packet) {}
-            @Override public void onPacketReceived(IPCClient client, Packet packet) {}
-            @Override public void onActivityJoin(IPCClient client, String secret) {}
-            @Override public void onActivitySpectate(IPCClient client, String secret) {}
-            @Override public void onActivityJoinRequest(IPCClient client, String secret, User user) {}
-
-            @Override
-            public void onReady(IPCClient client) {
-                connected = true;
-                if (pendingState != null) {
-                    updatePresence(pendingState, pendingSong);
+    private static void connect(IPCClient connectingClient) {
+        try {
+            connectingClient.connect();
+        } catch (Exception e) {
+            synchronized (LOCK) {
+                if (client == connectingClient) {
+                    client = null;
+                    connected = false;
                 }
             }
-
-            @Override
-            public void onClose(IPCClient client, JsonObject json) {
-                connected = false;
-            }
-
-            @Override
-            public void onDisconnect(IPCClient client, Throwable t) {
-                connected = false;
-            }
-        });
-
-        try {
-            client.connect();
-        } catch (Exception e) {
-            connected = false;
             System.out.println("Discord not active: " + e.getMessage());
         }
     }
@@ -78,15 +111,19 @@ public final class DiscordPresence {
             return;
         }
 
-        pendingState = state;
-        pendingSong = songName;
+        IPCClient activeClient;
+        synchronized (LOCK) {
+            pendingState = state;
+            pendingSong = songName;
 
-        if (GameSettings.get().disableRichPresence()) {
-            return;
-        }
+            if (GameSettings.get().disableRichPresence()) {
+                return;
+            }
 
-        if (!connected || client == null) {
-            return;
+            if (!connected || client == null) {
+                return;
+            }
+            activeClient = client;
         }
 
         try {
@@ -103,27 +140,39 @@ public final class DiscordPresence {
                 builder.setStartTimestamp(START_TIMESTAMP);
             }
                 
-            client.sendRichPresence(builder.build());
+            activeClient.sendRichPresence(builder.build());
         } catch (Exception e) {
             System.out.println("Rich Presence Error: " + e.getMessage());
         }
     }
 
     public static void stop() {
-        if (client != null) {
-            try { client.close(); } catch (Exception ignored) {}
+        IPCClient clientToClose;
+        synchronized (LOCK) {
+            clientToClose = client;
+            client = null;
+            connected = false;
         }
-        client = null;
-        connected = false;
+        if (clientToClose != null) {
+            try { clientToClose.close(); } catch (Exception ignored) {}
+        }
     }
 
     /** Włącza lub wyłącza połączenie z Discordem bez ponownego uruchamiania gry. */
     public static void setRichPresenceDisabled(boolean disabled) {
-        if (disabled) {
-            stop();
-        } else {
+        setRichPresenceEnabled(!disabled);
+    }
+
+    public static void setRichPresenceEnabled(boolean enabled) {
+        if (enabled) {
             start();
+        } else {
+            stop();
         }
+    }
+
+    private static boolean isConnecting() {
+        return connectThread != null && connectThread.isAlive();
     }
 
     // Helpers

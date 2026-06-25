@@ -623,9 +623,9 @@ final class SettingsOverlay {
     private HBox disableRichPresenceRow() {
         HBox row = toggleRow(I18n.get("settings.disable_rich_presence"), b -> disableRichPresenceToggle = b, () -> {
             GameSettings settings = GameSettings.get();
-            boolean disabled = !settings.disableRichPresence();
-            settings.setDisableRichPresence(disabled);
-            DiscordPresence.setRichPresenceDisabled(disabled);
+            boolean enabled = !settings.richPresenceEnabled();
+            settings.setRichPresenceEnabled(enabled);
+            DiscordPresence.setRichPresenceEnabled(enabled);
             updateDisableRichPresenceToggle();
         });
         updateDisableRichPresenceToggle();
@@ -633,7 +633,7 @@ final class SettingsOverlay {
     }
 
     private void updateDisableRichPresenceToggle() {
-        setToggleText(disableRichPresenceToggle, GameSettings.get().disableRichPresence());
+        setToggleText(disableRichPresenceToggle, GameSettings.get().richPresenceEnabled());
     }
 
     private HBox resetDefaultsRow() {
@@ -653,7 +653,7 @@ final class SettingsOverlay {
         reset.setOnAction(e -> {
             GameSettings.get().resetToDefaults();
             SoundManager.get().refreshLobbyVolume();
-            DiscordPresence.setRichPresenceDisabled(GameSettings.get().disableRichPresence());
+            DiscordPresence.setRichPresenceEnabled(GameSettings.get().richPresenceEnabled());
             SoundManager.get().play(SoundManager.Sfx.CONFIRM);
             rebuildOverlay();
         });

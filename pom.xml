@@ -125,6 +125,24 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.3.1</version>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.7.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-runtime-dependencies</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <outputDirectory>${project.build.directory}/app/lib</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- exec:java - dla CLI parsera audio (com.openguitar.beatmap.Main) -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>

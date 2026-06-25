@@ -198,6 +198,10 @@ public final class GameSettings {
         return disableRichPresence;
     }
 
+    public boolean richPresenceEnabled() {
+        return !disableRichPresence;
+    }
+
     public String localeTag() {
         return localeTag;
     }
@@ -309,6 +313,10 @@ public final class GameSettings {
 
     public void setDisableRichPresence(boolean disabled) {
         disableRichPresence = disabled;
+    }
+
+    public void setRichPresenceEnabled(boolean enabled) {
+        disableRichPresence = !enabled;
     }
 
     public void setLocaleTag(String tag) {
