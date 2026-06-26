@@ -81,8 +81,17 @@ public final class GameSettings {
     private boolean fullscreenOnStart = false;
     /** Wycisz całą aplikację, gdy jej okno nie ma fokusu. */
     private boolean muteWhenUnfocused = true;
+    /** Nie publikuj aktywności gry w Discord Rich Presence. */
+    private boolean disableRichPresence = false;
     /** Tag języka UI (BCP 47), np. {@code pl} lub {@code en}. */
     private String localeTag = LOCALE_DEFAULT;
+
+    /** Discord Api Settings */
+    /** App Id z discord developers */
+    private long discordAppId = 1516739980096180264L;
+    /** Link do githuba gry */
+    private String githubLink = "https://github.com/Pedritos22/OpenGuitar";
+
 
     private GameSettings() {}
 
@@ -185,6 +194,14 @@ public final class GameSettings {
         return muteWhenUnfocused;
     }
 
+    public boolean disableRichPresence() {
+        return disableRichPresence;
+    }
+
+    public boolean richPresenceEnabled() {
+        return !disableRichPresence;
+    }
+
     public String localeTag() {
         return localeTag;
     }
@@ -208,6 +225,14 @@ public final class GameSettings {
 
     private static double volumeScale(int percent) {
         return Math.max(VOLUME_MIN, Math.min(VOLUME_MAX, percent)) / 100.0;
+    }
+
+    public long discordAppId() {
+        return discordAppId;
+    }
+
+    public String githubLink() {
+        return githubLink;
     }
 
     // ── settery (bez zapisu — wołaj save() po edycji) ─────────────────────────
@@ -286,6 +311,14 @@ public final class GameSettings {
         muteWhenUnfocused = enabled;
     }
 
+    public void setDisableRichPresence(boolean disabled) {
+        disableRichPresence = disabled;
+    }
+
+    public void setRichPresenceEnabled(boolean enabled) {
+        disableRichPresence = !enabled;
+    }
+
     public void setLocaleTag(String tag) {
         localeTag = normalizeLocaleTag(tag);
         I18n.setLocaleTag(localeTag);
@@ -305,6 +338,7 @@ public final class GameSettings {
         countdownOnResume = true;
         fullscreenOnStart = false;
         muteWhenUnfocused = true;
+        disableRichPresence = false;
     }
 
     public void cycleLocale(int delta) {
@@ -400,6 +434,8 @@ public final class GameSettings {
                 p.getProperty("display.fullscreen.start", Boolean.toString(fullscreenOnStart)));
         muteWhenUnfocused = Boolean.parseBoolean(
                 p.getProperty("audio.mute.unfocused", Boolean.toString(muteWhenUnfocused)));
+        disableRichPresence = Boolean.parseBoolean(
+                p.getProperty("discord.rich.presence.disabled", Boolean.toString(disableRichPresence)));
         setLocaleTag(p.getProperty("display.locale", localeTag));
         dedupeKeys();
     }
@@ -422,6 +458,7 @@ public final class GameSettings {
         p.setProperty("gameplay.countdown.resume", Boolean.toString(countdownOnResume));
         p.setProperty("display.fullscreen.start", Boolean.toString(fullscreenOnStart));
         p.setProperty("audio.mute.unfocused", Boolean.toString(muteWhenUnfocused));
+        p.setProperty("discord.rich.presence.disabled", Boolean.toString(disableRichPresence));
         p.setProperty("display.locale", localeTag);
         try {
             Path parent = storageFile.getParent();

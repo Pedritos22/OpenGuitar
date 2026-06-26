@@ -83,6 +83,8 @@ public class GameApp extends Application {
             }
         });
 
+        DiscordPresence.start();
+        
         SongContext fromArgs = loadFromArgs(getParameters().getRaw());
         if (fromArgs != null) {
             returnToMenuAfterSong = false;
@@ -118,6 +120,7 @@ public class GameApp extends Application {
                 GameLog.fine(LOG, "app", "launchTitle() — focus na panelu startowym");
             }
         });
+        DiscordPresence.updatePresence(DiscordPresence.DiscordState.CHOOSING_SONG, "");
     }
 
     private void launchMenu() {
@@ -143,6 +146,7 @@ public class GameApp extends Application {
                 GameLog.fine(LOG, "app", "launchMenu() — focus na menu");
             }
         });
+        DiscordPresence.updatePresence(DiscordPresence.DiscordState.CHOOSING_SONG, "");
     }
 
     private void launchGame(SongContext context) {
@@ -160,6 +164,7 @@ public class GameApp extends Application {
         showScene(screen.getScene(), "OpenGuitar - " + context.title());
         screen.start();
         GameLog.event(LOG, "app", "launchGame() — GameScreen.start() wywołane");
+        DiscordPresence.updatePresence(DiscordPresence.DiscordState.PLAYING_SONG, context.title());
     }
 
     /**
@@ -183,6 +188,7 @@ public class GameApp extends Application {
     @Override
     public void stop() {
         shutdownResources();
+        DiscordPresence.stop();
     }
 
     /** Bezpieczne zamknięcie — Maven/javafx:run inaczej raportuje kod 143 (SIGTERM). */

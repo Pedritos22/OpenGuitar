@@ -96,6 +96,7 @@ class GameSettingsTest {
         s.setCountdownOnResume(false);
         s.setFullscreenOnStart(true);
         s.setMuteWhenUnfocused(false);
+        s.setRichPresenceEnabled(false);
         s.setLocaleTag("en");
         s.setLaneKey(2, KeyCode.SPACE);
         s.save();
@@ -115,6 +116,8 @@ class GameSettingsTest {
         assertFalse(loaded.countdownOnResume());
         assertTrue(loaded.fullscreenOnStart());
         assertFalse(loaded.muteWhenUnfocused());
+        assertFalse(loaded.richPresenceEnabled());
+        assertTrue(loaded.disableRichPresence());
         assertEquals("en", loaded.localeTag());
         assertEquals(KeyCode.SPACE, loaded.laneKey(2));
     }
@@ -134,6 +137,7 @@ class GameSettingsTest {
         s.setCountdownOnResume(false);
         s.setFullscreenOnStart(true);
         s.setMuteWhenUnfocused(false);
+        s.setRichPresenceEnabled(false);
         s.setLocaleTag("en");
         s.setLaneKey(0, KeyCode.A);
 
@@ -151,6 +155,8 @@ class GameSettingsTest {
         assertTrue(s.countdownOnResume());
         assertFalse(s.fullscreenOnStart());
         assertTrue(s.muteWhenUnfocused());
+        assertTrue(s.richPresenceEnabled());
+        assertFalse(s.disableRichPresence());
         assertEquals("en", s.localeTag());
         assertEquals(KeyCode.D, s.laneKey(0));
         assertEquals(KeyCode.F, s.laneKey(1));
