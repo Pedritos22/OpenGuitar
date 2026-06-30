@@ -121,8 +121,15 @@ final class SettingsOverlay {
         hint.setTextFill(Color.web(PersonaMenuTheme.TEXT_MUTED));
         hint.setPadding(new Insets(4, 0, 0, 1));
 
-        VBox head = new VBox(-4, heading, sub, hint);
-        head.setAlignment(Pos.CENTER_LEFT);
+        VBox headText = new VBox(-4, heading, sub, hint);
+        headText.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(headText, Priority.ALWAYS);
+
+        Button close = closeButton();
+        close.setOnAction(e -> close());
+
+        HBox head = new HBox(10, headText, close);
+        head.setAlignment(Pos.TOP_LEFT);
 
         VBox body = new VBox(6,
                 sectionBlock(I18n.get("settings.section.controls"), keyBindingsGrid()),
@@ -194,6 +201,15 @@ final class SettingsOverlay {
         VBox block = new VBox(4, cap, group);
         block.setFillWidth(true);
         return block;
+    }
+
+    private static Button closeButton() {
+        Button b = new Button("\u2715");
+        b.setStyle(PersonaMenuTheme.closeButton());
+        b.setMinSize(PersonaMenuTheme.SETTINGS_BTN_HEIGHT, PersonaMenuTheme.SETTINGS_BTN_HEIGHT);
+        b.setPrefSize(PersonaMenuTheme.SETTINGS_BTN_HEIGHT, PersonaMenuTheme.SETTINGS_BTN_HEIGHT);
+        b.setMaxSize(PersonaMenuTheme.SETTINGS_BTN_HEIGHT, PersonaMenuTheme.SETTINGS_BTN_HEIGHT);
+        return b;
     }
 
     private GridPane keyBindingsGrid() {

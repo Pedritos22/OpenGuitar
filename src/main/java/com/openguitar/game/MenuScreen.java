@@ -495,6 +495,15 @@ public final class MenuScreen {
         return b;
     }
 
+    private static Button closeButton() {
+        Button b = new Button("\u2715");
+        b.setStyle(PersonaMenuTheme.closeButton());
+        b.setMinSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
+        b.setPrefSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
+        b.setMaxSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
+        return b;
+    }
+
     private static ImageView createLogo() {
         var url = MenuScreen.class.getResource("/images/menu-logo.png");
         if (url == null) {
@@ -934,8 +943,15 @@ public final class MenuScreen {
         sub.setFont(PersonaFonts.label(13));
         sub.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
 
-        VBox head = new VBox(-2, heading, sub);
-        head.setAlignment(Pos.CENTER_LEFT);
+        VBox headText = new VBox(-2, heading, sub);
+        headText.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(headText, Priority.ALWAYS);
+
+        Button close = closeButton();
+        close.setOnAction(e -> closeHistory());
+
+        HBox head = new HBox(12, headText, close);
+        head.setAlignment(Pos.TOP_LEFT);
 
         VBox list = new VBox(6);
         list.setFillWidth(true);
