@@ -5,6 +5,10 @@ import com.openguitar.beatmap.SongContext;
 import com.openguitar.game.view.FullscreenScaler;
 import com.openguitar.game.view.PersonaFonts;
 import com.openguitar.game.view.PersonaMenuFx;
+import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -27,6 +31,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.util.Duration;
 
 import java.awt.Desktop;
 import java.io.File;
@@ -93,6 +98,7 @@ public final class MenuScreen {
     private Button backButton;
     private TextField searchField;
     private ScrollPane songsScroll;
+    private Timeline selectionPromptPulse;
     private boolean dropZoneHighlighted;
     private List<SongEntry> songEntries = List.of();
 
@@ -411,7 +417,7 @@ public final class MenuScreen {
 
         final int rowIndex = navRows.size();
         String songId = ready ? entry.context().songId() : null;
-        navRows.add(new RowHandle(row, action, ready, slide, songId, entry.title(), entry.audioPath()));
+        navRows.add(new RowHandle(row, action, ready, slide, songId, entry.title(), entry.audioPath(), name));
 
         applyRowStyle(row, ready, false);
         // Zaznaczenie ustawia WYŁĄCZNIE klik — dzięki temu można wybrać utwór, a potem
@@ -495,6 +501,15 @@ public final class MenuScreen {
         return b;
     }
 
+    private static Button closeButton() {
+        Button b = new Button("\u2715");
+        b.setStyle(PersonaMenuTheme.closeButton());
+        b.setMinSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
+        b.setPrefSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
+        b.setMaxSize(PersonaMenuTheme.BTN_HEIGHT, PersonaMenuTheme.BTN_HEIGHT);
+        return b;
+    }
+
     private static ImageView createLogo() {
         var url = MenuScreen.class.getResource("/images/menu-logo.png");
         if (url == null) {
@@ -515,6 +530,7 @@ public final class MenuScreen {
     // ── logika ─────────────────────────────────────────────────────────────
 
     public void reload() {
+        stopSelectionPromptPulse();
         SoundManager.get().stopSongPreview();
         setDropZoneHighlight(false);
         songsList.getChildren().clear();
@@ -532,6 +548,7 @@ public final class MenuScreen {
     }
 
     private void renderSongEntries() {
+        stopSelectionPromptPulse();
         SoundManager.get().stopSongPreview();
         songsList.getChildren().clear();
         songsList.setAlignment(Pos.TOP_LEFT);
@@ -903,7 +920,7 @@ public final class MenuScreen {
             return;
         }
         if (selectedIndex < 0 || selectedIndex >= navRows.size()) {
-            setStatus(I18n.get("menu.status.select_song"));
+            showSelectionPrompt();
             return;
         }
         RowHandle h = navRows.get(selectedIndex);
@@ -934,8 +951,15 @@ public final class MenuScreen {
         sub.setFont(PersonaFonts.label(13));
         sub.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
 
-        VBox head = new VBox(-2, heading, sub);
-        head.setAlignment(Pos.CENTER_LEFT);
+        VBox headText = new VBox(-2, heading, sub);
+        headText.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(headText, Priority.ALWAYS);
+
+        Button close = closeButton();
+        close.setOnAction(e -> closeHistory());
+
+        HBox head = new HBox(12, headText, close);
+        head.setAlignment(Pos.TOP_LEFT);
 
         VBox list = new VBox(6);
         list.setFillWidth(true);
@@ -1042,9 +1066,10 @@ public final class MenuScreen {
         String songId;
         final String title;
         final Path audioPath;
+        final Label titleLabel;
 
         RowHandle(HBox node, Button action, boolean ready, PersonaMenuFx.SlideControl slide,
-                  String songId, String title, Path audioPath) {
+                  String songId, String title, Path audioPath, Label titleLabel) {
             this.node = node;
             this.action = action;
             this.ready = ready;
@@ -1052,6 +1077,7 @@ public final class MenuScreen {
             this.songId = songId;
             this.title = title;
             this.audioPath = audioPath;
+            this.titleLabel = titleLabel;
         }
     }
 
@@ -1078,6 +1104,78 @@ public final class MenuScreen {
     }
 
     private void setStatus(String text) {
+        stopSelectionPromptPulse();
+        statusLabel.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
         statusLabel.setText(text);
+    }
+
+    private void showSelectionPrompt() {
+        stopSelectionPromptPulse();
+        statusLabel.setText(I18n.get("menu.status.select_song"));
+        statusLabel.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
+        SoundManager.get().play(SoundManager.Sfx.CLICK_GLASS);
+        selectionPromptPulse = new Timeline(
+                promptPulseFrame(0, 1.000, 0),
+                promptPulseFrame(150, 1.020, 0.35),
+                promptPulseFrame(360, 1.000, 0),
+                promptPulseFrame(520, 1.012, 0.24),
+                promptPulseFrame(760, 1.000, 0));
+        selectionPromptPulse.setOnFinished(e -> {
+            selectionPromptPulse = null;
+            resetSelectionPromptText();
+        });
+        selectionPromptPulse.playFromStart();
+    }
+
+    private KeyFrame promptPulseFrame(int millis, double statusScale, double accentAmount) {
+        Color statusColor = mix(
+                Color.web(PersonaMenuTheme.TEXT_DIM),
+                Color.web(PersonaMenuTheme.ACCENT_GLOW),
+                accentAmount);
+        Color titleColor = mix(
+                Color.web(PersonaMenuTheme.TEXT),
+                Color.web(PersonaMenuTheme.ACCENT_GLOW),
+                accentAmount);
+
+        List<KeyValue> values = new ArrayList<>();
+        values.add(new KeyValue(statusLabel.scaleXProperty(), statusScale, Interpolator.EASE_BOTH));
+        values.add(new KeyValue(statusLabel.scaleYProperty(), statusScale, Interpolator.EASE_BOTH));
+        values.add(new KeyValue(statusLabel.textFillProperty(), statusColor, Interpolator.EASE_BOTH));
+        for (RowHandle h : navRows) {
+            values.add(new KeyValue(h.titleLabel.scaleXProperty(), 1 + ((statusScale - 1) * 1.0),
+                    Interpolator.EASE_BOTH));
+            values.add(new KeyValue(h.titleLabel.scaleYProperty(), 1 + ((statusScale - 1) * 1.0),
+                    Interpolator.EASE_BOTH));
+            values.add(new KeyValue(h.titleLabel.textFillProperty(), titleColor, Interpolator.EASE_BOTH));
+        }
+        return new KeyFrame(Duration.millis(millis), values.toArray(KeyValue[]::new));
+    }
+
+    private void stopSelectionPromptPulse() {
+        if (selectionPromptPulse != null) {
+            selectionPromptPulse.stop();
+            selectionPromptPulse = null;
+        }
+        resetSelectionPromptText();
+    }
+
+    private void resetSelectionPromptText() {
+        statusLabel.setScaleX(1);
+        statusLabel.setScaleY(1);
+        statusLabel.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
+        for (RowHandle h : navRows) {
+            h.titleLabel.setScaleX(1);
+            h.titleLabel.setScaleY(1);
+            h.titleLabel.setTextFill(Color.web(PersonaMenuTheme.TEXT));
+        }
+    }
+
+    private static Color mix(Color from, Color to, double amount) {
+        double t = Math.max(0, Math.min(1, amount));
+        return new Color(
+                from.getRed() + (to.getRed() - from.getRed()) * t,
+                from.getGreen() + (to.getGreen() - from.getGreen()) * t,
+                from.getBlue() + (to.getBlue() - from.getBlue()) * t,
+                from.getOpacity() + (to.getOpacity() - from.getOpacity()) * t);
     }
 }

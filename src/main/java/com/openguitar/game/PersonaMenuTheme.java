@@ -336,4 +336,18 @@ public final class PersonaMenuTheme {
              + "-fx-border-radius: 0;"
              + "-fx-cursor: hand;";
     }
+
+    public static String closeButton() {
+        return "-fx-background-color: rgba(0, 212, 255, 0.06);"
+             + "-fx-text-fill: " + ACCENT_GLOW + ";"
+             + "-fx-font-family: 'System';"
+             + "-fx-font-size: 13px;"
+             + "-fx-font-weight: bold;"
+             + "-fx-padding: 0;"
+             + "-fx-background-radius: 0;"
+             + "-fx-border-color: " + BORDER + ";"
+             + "-fx-border-width: 1;"
+             + "-fx-border-radius: 0;"
+             + "-fx-cursor: hand;";
+    }
 }
