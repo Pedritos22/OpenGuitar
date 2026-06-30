@@ -530,6 +530,7 @@ public final class MenuScreen {
     // ── logika ─────────────────────────────────────────────────────────────
 
     public void reload() {
+        stopSelectionPromptPulse();
         SoundManager.get().stopSongPreview();
         setDropZoneHighlight(false);
         songsList.getChildren().clear();
@@ -547,6 +548,7 @@ public final class MenuScreen {
     }
 
     private void renderSongEntries() {
+        stopSelectionPromptPulse();
         SoundManager.get().stopSongPreview();
         songsList.getChildren().clear();
         songsList.setAlignment(Pos.TOP_LEFT);
@@ -1160,6 +1162,7 @@ public final class MenuScreen {
     private void resetSelectionPromptText() {
         statusLabel.setScaleX(1);
         statusLabel.setScaleY(1);
+        statusLabel.setTextFill(Color.web(PersonaMenuTheme.TEXT_DIM));
         for (RowHandle h : navRows) {
             h.titleLabel.setScaleX(1);
             h.titleLabel.setScaleY(1);
