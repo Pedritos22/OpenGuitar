@@ -552,7 +552,7 @@ public final class GameScreen {
     // ---------- pętla gry ----------
 
     private void tick(long nowNanos) {
-        if (showFpsCounter) {
+        if (showFpsCounter && !paused) {
             updateFps(nowNanos);
         }
 
